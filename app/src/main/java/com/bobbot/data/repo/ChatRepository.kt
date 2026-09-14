@@ -105,6 +105,7 @@ data class CompletionNotice(val liveId: String, val storedId: String?, val profi
 class ChatRepository @Inject constructor(
     private val socket: GatewaySocket,
     private val api: HermesApi,
+    private val prefs: com.bobbot.data.prefs.AppPrefs,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val sessions = ConcurrentHashMap<String, MutableStateFlow<ChatSessionState>>()
@@ -132,6 +133,24 @@ class ChatRepository @Inject constructor(
     fun liveFor(storedId: String): String? = storedToLive[storedId]
 
     suspend fun connect() = socket.ensureConnected()
+
+    private val mainConversations = MainConversationResolver()
+
+    /** A bot's direct conversation is distinct from relay and task sessions. */
+    suspend fun openMainConversation(profile: String): String {
+        val server = prefs.current().baseUrl
+        return mainConversations.open(
+            saved = { prefs.mainConversation(server, profile) },
+            live = { id -> storedToLive[id]?.takeIf { sessions.containsKey(it) } },
+            latest = { id ->
+                try { api.latestDescendant(profile, id) }
+                catch (e: com.bobbot.core.net.HermesHttpException) { if (e.code == 404) null else throw e }
+            },
+            resume = { resumeSession(it, profile) },
+            create = { val live = createSession(profile); live to (sessions[live]?.value?.storedId ?: "") },
+            save = { prefs.setMainConversation(server, profile, it) },
+        )
+    }
 
     /** Create a fresh session for a bot. Returns the live id. */
     suspend fun createSession(profile: String, model: String? = null, provider: String? = null, closeOnDisconnect: Boolean = false): String {

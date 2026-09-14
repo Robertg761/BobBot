@@ -116,7 +116,7 @@ class HermesApi @Inject constructor(val http: HermesClient) {
         (r.list("comments").ifEmpty { r.child("task").list("comments") }).map(BoardComment::from)
     }
     suspend fun createBoardTask(title: String, description: String, assignee: String?, createdBy: String?): JsonElement =
-        http.post("$kb/tasks", jsonOf("title" to title, "description" to description, "assignee" to assignee, "created_by" to createdBy))
+        http.post("$kb/tasks", jsonOf("title" to title, "body" to description, "assignee" to assignee))
     suspend fun commentBoardTask(id: String, body: String, author: String?): JsonElement =
         http.post("$kb/tasks/$id/comments", jsonOf("body" to body, "author" to author))
     suspend fun patchBoardTask(id: String, patch: JsonObject): JsonElement = http.patch("$kb/tasks/$id", patch)

@@ -147,5 +147,15 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
         context.dataStore.edit { it[K.NICKNAMES] = map.entries.joinToString("\n") { (k, v) -> "$k=$v" } }
     }
 
+    private fun conversationKey(server: String, profile: String) =
+        stringPreferencesKey("main_chat:" + android.util.Base64.encodeToString(
+            "$server\n$profile".toByteArray(), android.util.Base64.NO_WRAP))
+
+    suspend fun mainConversation(server: String, profile: String): String? =
+        context.dataStore.data.first()[conversationKey(server, profile)]
+
+    suspend fun setMainConversation(server: String, profile: String, id: String) =
+        context.dataStore.edit { it[conversationKey(server, profile)] = id }
+
     suspend fun resetAll() = context.dataStore.edit { it.clear() }
 }

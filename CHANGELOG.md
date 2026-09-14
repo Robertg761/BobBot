@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.0] - 2026-09-14
+
+### Added
+- Persistent group conversations hosted by Hermes, including history, interjections, stop, retry, and permission responses. Requires Hermes 0.21.2.
+- Team & permissions screen for selecting the authority bot and reviewing exact-action requests.
+- Optional Hermes team extension that routes specialist actions to Clove, escalates decisions to Robert, and requires authority review before completing team tasks.
+
+### Changed
+- Tapping a bot opens its ongoing direct conversation. Settings have a separate button; new task chats remain available from Chats.
+- New bots get a distinct persona and are configured for team work when the extension is installed.
+
+### Fixed
+- Persona-save failures are reported instead of silently completing bot creation.
+- Task creation sends the details using Hermes' correct API field. The board includes ready, running, review and triage states.
+- Activity comments are matched by comment ID instead of repeating an author's latest comment.
+
 ## [1.0.3] - 2026-09-14
 
 ### Changed

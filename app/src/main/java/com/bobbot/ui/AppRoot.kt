@@ -50,7 +50,8 @@ import com.bobbot.ui.bots.NewBotScreen
 import com.bobbot.ui.chat.ChatScreen
 import com.bobbot.ui.models.ModelsScreen
 import com.bobbot.ui.nav.Route
-import com.bobbot.ui.relay.RelayScreen
+import com.bobbot.ui.team.GroupsScreen
+import com.bobbot.ui.team.TeamScreen
 import com.bobbot.ui.sessions.SessionsScreen
 import com.bobbot.ui.settings.SettingsScreen
 import com.bobbot.ui.setup.SetupScreen
@@ -147,7 +148,7 @@ fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
             composable<Route.Chat> { entry ->
                 val r = entry.toRoute<Route.Chat>()
                 ChatScreen(
-                    sessionId = r.sessionId, profile = r.profile ?: "default",
+                    sessionId = r.sessionId, profile = r.profile ?: "default", mainConversation = r.mainConversation,
                     onBack = { nav.popBackStack() },
                     onOpenModels = { nav.navigate(Route.Models) },
                 )
@@ -163,7 +164,7 @@ fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
                 BotsScreen(
                     onOpenBot = { nav.navigate(Route.BotDetail(it)) },
                     onNewBot = { nav.navigate(Route.NewBot) },
-                    onChat = { nav.navigate(Route.Chat(null, it)) },
+                    onChat = { nav.navigate(Route.Chat(profile = it, mainConversation = true)) },
                 )
             }
             composable<Route.BotDetail> { entry ->
@@ -171,20 +172,21 @@ fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
                 BotDetailScreen(
                     name = r.name,
                     onBack = { nav.popBackStack() },
-                    onChat = { nav.navigate(Route.Chat(null, it)) },
+                    onChat = { nav.navigate(Route.Chat(profile = it, mainConversation = true)) },
                     onOpenSession = { sid, prof -> nav.navigate(Route.Chat(sid, prof)) },
                 )
             }
             composable<Route.NewBot> {
                 NewBotScreen(onBack = { nav.popBackStack() }, onCreated = { name ->
-                    nav.navigate(Route.BotDetail(name)) { popUpTo(Route.Bots) }
+                    nav.navigate(Route.Chat(profile = name, mainConversation = true)) { popUpTo(Route.Bots) }
                 })
             }
             composable<Route.Board> {
-                BoardScreen(onOpenRelay = { nav.navigate(Route.Relay) }, onChat = { nav.navigate(Route.Chat(null, it)) })
+                BoardScreen(onOpenTeam = { nav.navigate(Route.Team) }, onOpenRelay = { nav.navigate(Route.Relay) }, onChat = { nav.navigate(Route.Chat(profile = it, mainConversation = true)) })
             }
-            composable<Route.Relay> { RelayScreen(onBack = { nav.popBackStack() }) }
-            composable<Route.Automations> { AutomationsScreen(onChat = { nav.navigate(Route.Chat(null, it)) }) }
+            composable<Route.Relay> { GroupsScreen(onBack = { nav.popBackStack() }) }
+            composable<Route.Team> { TeamScreen(onBack = { nav.popBackStack() }, onChat = { nav.navigate(Route.Chat(profile = it, mainConversation = true)) }) }
+            composable<Route.Automations> { AutomationsScreen(onChat = { nav.navigate(Route.Chat(profile = it, mainConversation = true)) }) }
             composable<Route.Models> { ModelsScreen(onBack = { nav.popBackStack() }) }
             composable<Route.Settings> {
                 SettingsScreen(

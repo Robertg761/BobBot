@@ -40,3 +40,7 @@ local/
 
 # Local Android tooling (created when running Gradle in this environment)
 .android-user-home/
+
+# Python server extension
+__pycache__/
+*.py[cod]

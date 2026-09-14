@@ -52,20 +52,24 @@ class ChatViewModel @Inject constructor(
     val ui: StateFlow<ChatUi> = _ui
     private var stateJob: Job? = null
     private var profile: String = "default"
+    private var mainConversation = false
+    private var opening = false
 
     init {
         viewModelScope.launch { chat.socketState.collect { s -> _ui.update { it.copy(socket = s) } } }
     }
 
-    fun open(sessionId: String?, profile: String) {
-        if (_ui.value.liveId != null) return
+    fun open(sessionId: String?, profile: String, mainConversation: Boolean = false) {
+        if (_ui.value.liveId != null || opening) return
+        opening = true
+        this.mainConversation = mainConversation
         this.profile = profile
         viewModelScope.launch {
             _ui.update { it.copy(connecting = true, error = null) }
             try {
                 val bot = bots.cached(profile) ?: runCatching { bots.refresh() }.getOrNull()?.firstOrNull { it.name == profile }
                 _ui.update { it.copy(bot = bot) }
-                val live = if (sessionId == null) chat.createSession(profile) else {
+                val live = if (mainConversation && sessionId == null) chat.openMainConversation(profile) else if (sessionId == null) chat.createSession(profile) else {
                     val target = runCatching { api.latestDescendant(profile.takeIf { it != "default" }, sessionId) }.getOrDefault(sessionId)
                     chat.resumeSession(target, profile)
                 }
@@ -74,11 +78,13 @@ class ChatViewModel @Inject constructor(
                 stateJob = viewModelScope.launch { chat.state(live)?.collect { s -> _ui.update { it.copy(session = s, liveId = s.liveId) } } }
             } catch (e: Exception) {
                 _ui.update { it.copy(connecting = false, error = e.message ?: "Could not open chat") }
+            } finally {
+                opening = false
             }
         }
     }
 
-    fun retry(sessionId: String?) { _ui.update { it.copy(liveId = null) }; open(sessionId, profile) }
+    fun retry(sessionId: String?) { _ui.update { it.copy(liveId = null) }; open(sessionId, profile, mainConversation) }
 
     fun setInput(v: String) = _ui.update { it.copy(input = v) }
 

@@ -57,7 +57,8 @@ class BoardRepository @Inject constructor(private val api: HermesApi) {
     }
 
     /** Ask bot `to` to do something, on behalf of `from` (a bot name or "you"). */
-    suspend fun sendTask(from: String?, to: String, title: String, body: String) = api.createBoardTask(title, body, to, from)
+    suspend fun sendTask(from: String?, to: String, title: String, body: String) =
+        api.createBoardTask(title, if (from != null && from != "you") "Robert requests this on behalf of ${BotNames.display(from)}.\n\n$body" else body, to, null)
     suspend fun comment(taskId: String, body: String, author: String?) = api.commentBoardTask(taskId, body, author)
     suspend fun setStatus(taskId: String, status: String) = api.patchBoardTask(taskId, jsonOf("status" to status))
     suspend fun assignees(): List<String> = runCatching { api.boardAssignees() }.getOrDefault(emptyList())
@@ -75,8 +76,8 @@ class BoardRepository @Inject constructor(private val api: HermesApi) {
                     "assigned" -> Triple(t.createdBy, e.payload.str("assignee") ?: t.assignee, "assigned “${t.title}”")
                     "commented" -> {
                         val author = e.author
-                        val c = comments.lastOrNull { it.author == author }
-                        Triple(author, t.assignee?.takeIf { it != author } ?: t.createdBy, c?.body ?: "commented")
+                        val c = comments.firstOrNull { it.id == e.payload.str("comment_id") }
+                        Triple(author, t.assignee?.takeIf { it != author } ?: t.createdBy, c?.body ?: e.payload.str("body") ?: "commented on the task")
                     }
                     "completed" -> Triple(t.assignee, t.createdBy, "completed “${t.title}”")
                     "blocked" -> Triple(t.assignee, t.createdBy, "is blocked on “${t.title}”")

@@ -1,0 +1,101 @@
+"""Durable, exact-action decisions. No Hermes imports, so the contract is testable."""
+import contextlib
+import hashlib
+import json
+import sqlite3
+import time
+import uuid
+
+
+class Store:
+    def __init__(self, path):
+        self.path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with self.connection() as db:
+            db.executescript('''
+                CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS requests (
+                    id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, profile TEXT NOT NULL,
+                    session TEXT NOT NULL, tool TEXT NOT NULL, args TEXT NOT NULL,
+                    task TEXT NOT NULL, board TEXT NOT NULL, status TEXT NOT NULL,
+                    reason TEXT NOT NULL DEFAULT '', reviewer TEXT NOT NULL DEFAULT '',
+                    created REAL NOT NULL, expires REAL NOT NULL, review_task TEXT);
+                CREATE INDEX IF NOT EXISTS by_fingerprint ON requests(fingerprint, created);
+            ''')
+
+    @contextlib.contextmanager
+    def connection(self):
+        db = sqlite3.connect(self.path, timeout=5, isolation_level=None)
+        db.row_factory = sqlite3.Row
+        try:
+            yield db
+        finally:
+            db.close()
+
+    def settings(self):
+        with self.connection() as db:
+            row = db.execute("SELECT value FROM settings WHERE key='team'").fetchone()
+        return json.loads(row[0]) if row else {"authority": "default", "enabled": True}
+
+    def configure(self, authority, enabled):
+        with self.connection() as db:
+            db.execute("INSERT OR REPLACE INTO settings VALUES ('team', ?)",
+                       (json.dumps({"authority": authority, "enabled": enabled}),))
+
+    def gate(self, profile, session, tool, args, task='', board='default'):
+        encoded = json.dumps(args, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+        fingerprint = hashlib.sha256(json.dumps([profile, session, tool, encoded, task, board]).encode()).hexdigest()
+        now = time.time()
+        with self.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT * FROM requests WHERE fingerprint=? ORDER BY created DESC LIMIT 1', (fingerprint,)).fetchone()
+            if row and row['status'] == 'approved' and row['expires'] > now:
+                db.execute("UPDATE requests SET status='consumed' WHERE id=?", (row['id'],))
+                db.commit()
+                return None
+            if row and row['status'] in ('pending', 'needs_user', 'denied') and row['expires'] > now:
+                db.commit()
+                return dict(row)
+            ident = str(uuid.uuid4())
+            db.execute('INSERT INTO requests(id,fingerprint,profile,session,tool,args,task,board,status,created,expires) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                       (ident, fingerprint, profile, session, tool, encoded, task, board, 'pending', now, now + 3600))
+            row = dict(db.execute('SELECT * FROM requests WHERE id=?', (ident,)).fetchone())
+            db.commit()
+            return row
+
+    def get(self, ident):
+        with self.connection() as db:
+            row = db.execute('SELECT * FROM requests WHERE id=?', (ident,)).fetchone()
+        if not row:
+            raise ValueError('Permission request not found')
+        return dict(row)
+
+    def requests(self):
+        with self.connection() as db:
+            return [dict(r) for r in db.execute('SELECT * FROM requests ORDER BY created DESC LIMIT 100')]
+
+    def for_task(self, task, *, review=False):
+        column = 'review_task' if review else 'task'
+        with self.connection() as db:
+            return [dict(r) for r in db.execute(f'SELECT * FROM requests WHERE {column}=? ORDER BY created DESC', (task,))]
+
+    def decide(self, ident, choice, reason, reviewer, human=False):
+        if choice not in ('approved', 'denied', 'needs_user') or not reason.strip():
+            raise ValueError('Choose approved, denied or needs_user and provide a reason')
+        if not human and reviewer != self.settings()['authority']:
+            raise PermissionError('Only the authority bot may decide')
+        with self.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT * FROM requests WHERE id=?', (ident,)).fetchone()
+            allowed = ('pending', 'needs_user') if human else ('pending',)
+            if not row or row['status'] not in allowed or row['expires'] <= time.time():
+                db.rollback()
+                raise ValueError('Request is no longer awaiting this reviewer')
+            db.execute('UPDATE requests SET status=?,reason=?,reviewer=? WHERE id=?',
+                       (choice, reason.strip(), 'you' if human else reviewer, ident))
+            db.commit()
+        return self.get(ident)
+
+    def routed(self, ident, task):
+        with self.connection() as db:
+            db.execute('UPDATE requests SET review_task=? WHERE id=?', (task, ident))

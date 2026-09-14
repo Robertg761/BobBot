@@ -9,16 +9,16 @@ Dark theme only. Kotlin, Jetpack Compose, Material 3.
 - **First-run setup**: server address → sign in through the dashboard's native PKCE flow (system browser, no password typed in the app) → optional push notifications. Loopback-bound dashboards can use a static session token instead.
 - **Chats**: streaming replies over the dashboard's JSON-RPC WebSocket (`/api/ws`), markdown rendering, reasoning disclosure, tool-call cards, image attachments, tool-approval / clarify / sudo prompts, stop, rename, pin, archive, search across all bots.
 - **Model switching**: tap the model chip in any chat to switch that chat's model (or make it the bot's default). A Models screen manages the global default, auxiliary model slots, and shows the MoA preset.
-- **Bots**: every Hermes profile is a bot. Create one in a 3-step wizard (identity + persona, model, review), edit its SOUL.md persona, description, model, and skills. A "Grok bot" is just a bot whose model is a Grok model on the xAI provider.
+- **Bots**: tap a bot to open its ongoing direct conversation, with a separate settings button. Every Hermes profile is a bot. Create one in a 3-step wizard (identity + persona, model, review), edit its SOUL.md persona, description, model, and skills. A "Grok bot" is just a bot whose model is a Grok model on the xAI provider.
 - **Bot network**: the kanban board is Hermes' bot-to-bot bus. The Network tab renders every task hand-off and comment as "**Bot A → Bot B**" with both avatars, so it is always clear when bots talk to each other. You can also ask a bot to do something on another bot's behalf.
-- **Relay**: start a live conversation between two bots. BobBot opens a session with each and passes replies back and forth; you can interject at any time. Every message is labelled with sender → recipient.
+- **Group conversations**: choose two to six bots. Hermes hosts the conversation, keeps its history, and continues accepted work when the phone disconnects. Includes interjections, stop, retry and tool approval controls.
 - **Automations**: Hermes cron jobs, which are how bots reach out proactively. Create, edit, pause, run now, inspect runs. Deliver to `ntfy` to get a push on this phone.
 - **Notifications**: a foreground "link" service subscribes to a private ntfy topic (which setup registers with Hermes' ntfy channel), watches automations and the board, and posts a notification when a reply finishes while the app is in the background.
 - **Settings / System**: connection, identity, notification toggles, ntfy config with a test button, server status, host stats, usage, gateway restart, logs.
 
 ## Requirements on the computer
 
-- Hermes Agent 0.19+ with the dashboard running and reachable from the phone, e.g. `hermes dashboard --host 0.0.0.0 --port 9119`. A non-loopback bind requires an auth provider (Nous OAuth is what this app expects); the app discovers `auth_flows` from `/api/status` and needs `native_pkce`.
+- Hermes Agent 0.21.2+ with the dashboard running and reachable from the phone, e.g. `hermes dashboard --host 0.0.0.0 --port 9119`. A non-loopback bind requires an auth provider (Nous OAuth is what this app expects); the app discovers `auth_flows` from `/api/status` and needs `native_pkce`.
 - For push notifications: nothing extra. Setup enables the built-in `ntfy` messaging platform on Hermes with a generated private topic. Bots and automations that deliver to `ntfy` land on the phone.
 - For the Network tab: the bundled kanban plugin (`kanban.db` present in `~/.hermes`).
 
@@ -59,5 +59,23 @@ Notes on the protocol that shaped the design:
 - Chat has no REST send endpoint; everything is JSON-RPC over `/api/ws`. Each socket needs a fresh single-use ticket from `POST /api/auth/ws-ticket` (30 s TTL).
 - `session_id` from `session.create` is an ephemeral live handle; `stored_session_id` is the durable id used for resume and for the Chats list.
 - `thinking.delta` is a spinner label, not reasoning; `reasoning.delta` is the real thing.
-- Hermes has no agent-to-agent primitive besides the kanban board, so the Relay feature runs client-side.
-- `send_message` is deliberately not model-callable in Hermes, so proactive pushes come from automations (cron) and the `cronjob` tool's `deliver` parameter, routed to the ntfy topic.
+- Group conversations use the native `groups.*` RPC methods. Kanban handles persistent assignments and task reviews.
+- Proactive pushes use automations and the `cronjob` tool's delivery routing to the configured ntfy topic.
+
+## Clove and the team
+
+Install the Hermes extension using [server/README.md](server/README.md). In BobBot,
+open Network → Permissions to select the authority profile, configure existing
+bots, and review requests. The default authority is `default`, whose current persona
+is Clove. New profiles created in BobBot receive the extension when it is installed
+on the connected server.
+
+Specialists submit completed work to the authority for review. Tool actions outside
+the extension's explicit list of read/coordination tools require an exact-action
+permission. Clove can allow the action once, deny it, or send the decision to Robert.
+Hermes' own approval checks still apply. Direct conversations need a retry after a
+decision; board tasks wait on durable review dependencies and resume on the server.
+
+Group conversations and individual tasks have separate context. Assignments should
+include the relevant details and attach or link their results. Groups are bounded
+by Hermes' discussion policy; they are not endless autonomous conversations.

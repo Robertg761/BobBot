@@ -72,11 +72,11 @@ import com.bobbot.ui.theme.botColor
 
 private const val SYSTEM = "system"
 
-private val StatusOrder = listOf("todo", "in_progress", "done", "blocked")
+private val StatusOrder = listOf("triage", "todo", "ready", "running", "review", "done", "blocked")
 
 private fun statusLabel(status: String): String = when (status.lowercase()) {
     "todo" -> "To do"
-    "in_progress", "in-progress", "doing" -> "In progress"
+    "running", "in_progress", "in-progress", "doing" -> "In progress"
     "done" -> "Done"
     "blocked" -> "Blocked"
     else -> status.replace('_', ' ').replaceFirstChar { it.uppercaseChar() }
@@ -84,7 +84,7 @@ private fun statusLabel(status: String): String = when (status.lowercase()) {
 
 private fun statusColor(status: String): Color = when (status.lowercase()) {
     "todo" -> BobColors.TextMuted
-    "in_progress", "in-progress", "doing" -> BobColors.Accent
+    "running", "in_progress", "in-progress", "doing" -> BobColors.Accent
     "done" -> BobColors.Mint
     "blocked" -> BobColors.Rose
     else -> BobColors.Violet
@@ -112,7 +112,7 @@ private fun priorityColor(priority: String?): Color = when (priority?.lowercase(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BoardScreen(onOpenRelay: () -> Unit, onChat: (profile: String) -> Unit) {
+fun BoardScreen(onOpenTeam: () -> Unit, onOpenRelay: () -> Unit, onChat: (profile: String) -> Unit) {
     val vm: BoardViewModel = hiltViewModel()
     val ui by vm.ui.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -125,6 +125,7 @@ fun BoardScreen(onOpenRelay: () -> Unit, onChat: (profile: String) -> Unit) {
             TopAppBar(
                 title = { Text("Bot network") },
                 actions = {
+                    TextButton(onClick = onOpenTeam) { Text("Permissions") }
                     IconButton(onClick = { vm.refresh() }) {
                         if (ui.refreshing) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = BobColors.Accent)
@@ -161,7 +162,7 @@ fun BoardScreen(onOpenRelay: () -> Unit, onChat: (profile: String) -> Unit) {
                         EmptyState(
                             title = "The kanban plugin is off",
                             subtitle = "Hermes runs bot-to-bot work through its kanban plugin, and this server does not have it enabled. " +
-                                "Turn on the kanban plugin to see tasks and activity here. A relay conversation still works without it.",
+                                "Turn on the kanban plugin to see tasks and activity here. Group conversations are available separately.",
                             icon = Icons.Outlined.CloudOff,
                         )
                     }
@@ -277,7 +278,7 @@ private fun RelayHeroCard(onOpenRelay: () -> Unit) {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            "Pick two bots, give them a topic, and watch them talk to each other live. You can interject at any point.",
+            "Choose two to six bots and give them a topic. Conversations continue on Hermes when your phone disconnects.",
             style = MaterialTheme.typography.bodyMedium,
             color = BobColors.TextMuted,
         )
@@ -289,7 +290,7 @@ private fun RelayHeroCard(onOpenRelay: () -> Unit) {
         ) {
             Icon(Icons.Outlined.Forum, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Open relay")
+            Text("Open group chats")
         }
     }
 }

@@ -83,12 +83,13 @@ import com.bobbot.ui.theme.botColor
 fun ChatScreen(
     sessionId: String?,
     profile: String,
+    mainConversation: Boolean = false,
     onBack: () -> Unit,
     onOpenModels: () -> Unit,
     vm: ChatViewModel = hiltViewModel(),
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    LaunchedEffect(sessionId, profile) { vm.open(sessionId, profile) }
+    LaunchedEffect(sessionId, profile) { vm.open(sessionId, profile, mainConversation) }
     val snack = remember { SnackbarHostState() }
     LaunchedEffect(ui.toast) { ui.toast?.let { snack.showSnackbar(it); vm.clearToast() } }
     val listState = rememberLazyListState()

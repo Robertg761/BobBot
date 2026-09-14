@@ -56,7 +56,19 @@ class BotsRepository @Inject constructor(private val api: HermesApi, private val
                 "clone_from" to cloneFrom, "keep_skills" to keepSkills,
             ),
         )
-        if (!soul.isNullOrBlank()) runCatching { api.setSoul(name, soul) }
+        val persona = soul?.trim()?.takeIf { it.isNotBlank() }
+            ?: "# $name\n\nYou are $name, a specialist assistant. ${description.trim()}\nYou have your own identity and report to the team's authority bot."
+        run {
+            try { api.setSoul(name, persona) }
+            catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                throw IllegalStateException("Bot '$name' was created, but its persona could not be saved. Open its settings to finish setup: ${e.message}", e)
+            }
+        }
+        try { api.http.post("/api/plugins/bobbot-team/profiles/$name/bootstrap", jsonOf()) }
+        catch (e: com.bobbot.core.net.HermesHttpException) {
+            if (e.code != 404) throw IllegalStateException("Bot '$name' was created, but team setup failed. Open Team & permissions to retry: ${e.message}", e)
+        }
         refresh()
         return r
     }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -135,7 +136,7 @@ fun BotsScreen(
                         Text("Bots", style = MaterialTheme.typography.displaySmall, color = BobColors.Text)
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            if (bots.isEmpty()) "Hermes profiles" else "${bots.size} profile${if (bots.size == 1) "" else "s"}",
+                            "Tap a bot to continue your conversation",
                             style = MaterialTheme.typography.bodyMedium,
                             color = BobColors.TextFaint,
                         )
@@ -191,7 +192,7 @@ private fun BotsErrorCard(message: String, onRetry: () -> Unit) {
 @Composable
 private fun BotCard(bot: Bot, onOpen: () -> Unit, onChat: () -> Unit) {
     val accent = botColor(bot.name)
-    BobCard(onClick = onOpen) {
+    BobCard(onClick = onChat) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BotAvatar(bot.name, size = 46.dp)
             Spacer(Modifier.width(12.dp))
@@ -205,7 +206,7 @@ private fun BotCard(bot: Bot, onOpen: () -> Unit, onChat: () -> Unit) {
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (bot.isDefault) Pill("Default", color = accent)
+                    if (bot.isDefault) Pill("Main bot", color = accent)
                 }
                 Spacer(Modifier.height(3.dp))
                 Text(
@@ -244,6 +245,7 @@ private fun BotCard(bot: Bot, onOpen: () -> Unit, onChat: () -> Unit) {
                 }
             }
             Box(Modifier.weight(1f))
+            IconButton(onClick = onOpen) { Icon(Icons.Outlined.Settings, "Bot settings", tint = BobColors.TextMuted) }
             Button(
                 onClick = onChat,
                 shape = RoundedCornerShape(14.dp),
