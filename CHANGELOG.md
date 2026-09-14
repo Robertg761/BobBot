@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.3] - 2026-09-14
+
+### Fixed
+- **Crash on opening a chat that contains a table or code block** (introduced in 1.3.2 by the bubble-hugging change). Bubbles still hug plain prose; anything with tables, code, lists or headings takes the full width. If you are on 1.3.2, update.
+
 ## [1.3.2] - 2026-09-14
 
 ### Changed

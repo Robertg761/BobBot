@@ -98,7 +98,7 @@ private fun TeammateBubble(m: ChatItem.Teammate, groupedAbove: Boolean, groupedB
             Box(
                 Modifier.widthIn(max = BubbleMaxWidth).clip(bubbleShape(mine = false, groupedAbove = groupedAbove, groupedBelow = groupedBelow))
                     .background(BobColors.BotBubble).padding(horizontal = 14.dp, vertical = 9.dp),
-            ) { MarkdownBody(m.text) }
+            ) { MarkdownBody(m.text, hug = true) }
         }
     }
 }
@@ -143,14 +143,46 @@ fun startsNewDay(previous: ChatItem?, item: ChatItem, zone: java.time.ZoneId = j
 }
 
 @Composable
-fun MarkdownBody(text: String, color: Color = BobColors.Text) {
+fun MarkdownBody(text: String, color: Color = BobColors.Text, hug: Boolean = false) {
     Markdown(
         content = text,
         colors = markdownColor(text = color, codeBackground = BobColors.Bg.copy(alpha = 0.6f), inlineCodeBackground = BobColors.Bg.copy(alpha = 0.6f)),
         typography = markdownTypography(),
-        // Hug the text: the renderer fills its width by default, which stretched every bot bubble to the maximum.
-        modifier = Modifier.width(androidx.compose.foundation.layout.IntrinsicSize.Max),
+        modifier = if (hug) Modifier.width(hugWidth(text)) else Modifier,
     )
+}
+
+/**
+ * How wide a bubble needs to be for plain prose. The markdown renderer fills its width by
+ * default, which stretched every bot bubble to the cap. Intrinsic measurement cannot be used:
+ * tables and code blocks are built on SubcomposeLayout and throw when asked for it (1.3.2 crash).
+ * So the widest line is measured as text; anything with block markup just takes the full cap.
+ */
+@Composable
+fun hugWidth(text: String): Dp {
+    val cap = BubbleMaxWidth
+    if (hasBlockMarkup(text)) return cap
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val style = MaterialTheme.typography.bodyLarge
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    return remember(text, style, density) {
+        val widest = text.lines().maxOfOrNull { line ->
+            if (line.isBlank()) 0 else measurer.measure(androidx.compose.ui.text.AnnotatedString(line), style = style, maxLines = 1, softWrap = false).size.width
+        } ?: 0
+        val needed = with(density) { widest.toDp() } + BubblePaddingH * 2
+        if (needed >= cap) cap else needed
+    }
+}
+
+private val BubblePaddingH = 14.dp
+
+/** Tables, fenced code, images, lists, headings and quotes render as blocks and want the full width. */
+fun hasBlockMarkup(text: String): Boolean {
+    if (text.contains("```") || text.contains("![") || text.contains('|')) return true
+    return text.lines().any { raw ->
+        val l = raw.trimStart()
+        l.startsWith("#") || l.startsWith("- ") || l.startsWith("* ") || l.startsWith("+ ") || l.startsWith("> ") || l.matches(Regex("""^\d+[.)]\s.*"""))
+    }
 }
 
 /** Corners: the side facing the sender gets tight where bubbles are stacked. */
@@ -210,7 +242,7 @@ private fun AssistantBubble(m: ChatItem.Assistant, profile: String, groupedAbove
                     .background(BobColors.BotBubble)
                     .padding(horizontal = 14.dp, vertical = 9.dp),
             ) {
-                MarkdownBody(m.text, color = if (m.interim) BobColors.TextMuted else BobColors.Text)
+                MarkdownBody(m.text, color = if (m.interim) BobColors.TextMuted else BobColors.Text, hug = !m.streaming)
             }
         }
         if (m.error != null) {
