@@ -61,6 +61,7 @@ class ChatViewModel @Inject constructor(
     private val api: HermesApi,
     private val board: com.bobbot.data.repo.BoardRepository,
     private val team: com.bobbot.data.repo.TeamRepository,
+    private val shares: com.bobbot.ui.share.ShareInbox,
 ) : ViewModel() {
     private val _ui = MutableStateFlow(ChatUi())
     val ui: StateFlow<ChatUi> = _ui
@@ -83,6 +84,10 @@ class ChatViewModel @Inject constructor(
         this.profile = profile
         draftKey = "$profile:" + (sessionId ?: if (mainConversation) "main" else "new")
         _ui.update { it.copy(input = chat.drafts[draftKey] ?: "") }
+        // A share from another app, handed over by the picker: text into the composer now, images once
+        // the session exists. The user reviews and sends; nothing goes out on its own.
+        val shared = shares.take()
+        shared?.text?.let { t -> setInput(listOf(_ui.value.input, t).filter { s -> s.isNotBlank() }.joinToString("\n\n")) }
         viewModelScope.launch {
             _ui.update { it.copy(connecting = true, error = null) }
             try {
@@ -93,6 +98,7 @@ class ChatViewModel @Inject constructor(
                     chat.resumeSession(target, profile)
                 }
                 _ui.update { it.copy(liveId = live, connecting = false) }
+                shared?.imageUris?.forEach { attach(it) }
                 isMain = mainConversation || chat.state(live)?.value?.title == ChatRepository.MAIN_CHAT_TITLE
                 _ui.update { it.copy(isMain = isMain) }
                 markRead()

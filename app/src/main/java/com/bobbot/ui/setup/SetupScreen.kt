@@ -37,6 +37,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,10 +54,13 @@ import com.bobbot.ui.components.BobCard
 import com.bobbot.ui.components.BotAvatar
 import com.bobbot.ui.theme.BobColors
 
+/** [pairUrl] arrives from a bobbot://pair QR code: the address is filled in and checked for you. */
 @Composable
-fun SetupScreen(onDone: () -> Unit, vm: SetupViewModel = hiltViewModel()) {
+fun SetupScreen(onDone: () -> Unit, pairUrl: String? = null, vm: SetupViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
+
+    LaunchedEffect(pairUrl) { if (!pairUrl.isNullOrBlank()) vm.pairWith(pairUrl) }
 
     Box(Modifier.fillMaxSize().background(BobColors.Bg).systemBarsPadding()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
