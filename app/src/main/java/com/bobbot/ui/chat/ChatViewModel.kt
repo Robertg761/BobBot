@@ -181,6 +181,15 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /** Send an earlier message again, verbatim. Attachments are not repeated: the images went with the original. */
+    fun resend(text: String) {
+        val live = _ui.value.liveId ?: return
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            try { chat.send(live, text) } catch (e: Exception) { toast(e.message ?: "Send failed") }
+        }
+    }
+
     fun interrupt() { val live = _ui.value.liveId ?: return; viewModelScope.launch { chat.interrupt(live) } }
 
     fun approve(choice: String) { val live = _ui.value.liveId ?: return; viewModelScope.launch { runCatching { chat.respondApproval(live, choice) }.onFailure { toast(it.message ?: "failed") } } }

@@ -9,6 +9,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,14 +42,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,20 +77,44 @@ private val BubbleMaxWidth = 300.dp
  * same sender, which tightens the bubble corners and spacing the way a messages app does.
  */
 @Composable
-fun MessageItem(item: ChatItem, profile: String, groupedAbove: Boolean = false, groupedBelow: Boolean = false) {
+fun MessageItem(
+    item: ChatItem,
+    profile: String,
+    groupedAbove: Boolean = false,
+    groupedBelow: Boolean = false,
+    /** Long-press on a bubble; null in places where message actions make no sense. */
+    onLongPress: ((ChatItem) -> Unit)? = null,
+) {
     when (item) {
-        is ChatItem.User -> UserBubble(item, groupedAbove, groupedBelow)
-        is ChatItem.Assistant -> AssistantBubble(item, profile, groupedAbove, groupedBelow)
+        is ChatItem.User -> UserBubble(item, groupedAbove, groupedBelow, onLongPress)
+        is ChatItem.Assistant -> AssistantBubble(item, profile, groupedAbove, groupedBelow, onLongPress)
         is ChatItem.Tool -> ActivityLine(item)
         is ChatItem.System -> SystemLine(item)
         is ChatItem.Delegation -> DelegationCard(item, profile)
-        is ChatItem.Teammate -> TeammateBubble(item, groupedAbove, groupedBelow)
+        is ChatItem.Teammate -> TeammateBubble(item, groupedAbove, groupedBelow, onLongPress)
     }
+}
+
+/**
+ * Long-press opens the message actions sheet. Plain tap keeps doing nothing, as it always has, so
+ * scrolling past a bubble never triggers anything.
+ */
+@Composable
+private fun Modifier.messageActions(item: ChatItem, onLongPress: ((ChatItem) -> Unit)?): Modifier {
+    val haptics = LocalHapticFeedback.current
+    if (onLongPress == null) return this
+    return combinedClickable(
+        onClick = {},
+        onLongClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            onLongPress(item)
+        },
+    )
 }
 
 /** Another bot speaking in this conversation: its own avatar and name, grey bubble on the left. */
 @Composable
-private fun TeammateBubble(m: ChatItem.Teammate, groupedAbove: Boolean, groupedBelow: Boolean) {
+private fun TeammateBubble(m: ChatItem.Teammate, groupedAbove: Boolean, groupedBelow: Boolean, onLongPress: ((ChatItem) -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().padding(end = 32.dp), verticalAlignment = Alignment.Bottom) {
         Box(Modifier.width(36.dp)) { if (!groupedBelow) BotAvatar(m.profile, 28.dp) }
         Column {
@@ -97,7 +126,7 @@ private fun TeammateBubble(m: ChatItem.Teammate, groupedAbove: Boolean, groupedB
             }
             Box(
                 Modifier.widthIn(max = BubbleMaxWidth).clip(bubbleShape(mine = false, groupedAbove = groupedAbove, groupedBelow = groupedBelow))
-                    .background(BobColors.BotBubble).padding(horizontal = 14.dp, vertical = 9.dp),
+                    .background(BobColors.BotBubble).messageActions(m, onLongPress).padding(horizontal = 14.dp, vertical = 9.dp),
             ) { MarkdownBody(m.text, hug = true) }
         }
     }
@@ -197,11 +226,12 @@ fun bubbleShape(mine: Boolean, groupedAbove: Boolean, groupedBelow: Boolean): Ro
 }
 
 @Composable
-private fun UserBubble(m: ChatItem.User, groupedAbove: Boolean, groupedBelow: Boolean) {
+private fun UserBubble(m: ChatItem.User, groupedAbove: Boolean, groupedBelow: Boolean, onLongPress: ((ChatItem) -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().padding(start = 48.dp), horizontalAlignment = Alignment.End) {
         Box(
             Modifier.widthIn(max = BubbleMaxWidth).clip(bubbleShape(mine = true, groupedAbove = groupedAbove, groupedBelow = groupedBelow))
                 .background(BobColors.UserBubble)
+                .messageActions(m, onLongPress)
                 .padding(horizontal = 14.dp, vertical = 9.dp),
         ) {
             Column {
@@ -219,7 +249,7 @@ private fun UserBubble(m: ChatItem.User, groupedAbove: Boolean, groupedBelow: Bo
 }
 
 @Composable
-private fun AssistantBubble(m: ChatItem.Assistant, profile: String, groupedAbove: Boolean, groupedBelow: Boolean) {
+private fun AssistantBubble(m: ChatItem.Assistant, profile: String, groupedAbove: Boolean, groupedBelow: Boolean, onLongPress: ((ChatItem) -> Unit)? = null) {
     var showReasoning by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(end = 40.dp), horizontalAlignment = Alignment.Start) {
         if (m.reasoning.isNotBlank()) {
@@ -243,6 +273,7 @@ private fun AssistantBubble(m: ChatItem.Assistant, profile: String, groupedAbove
                 Modifier.widthIn(max = BubbleMaxWidth)
                     .clip(bubbleShape(mine = false, groupedAbove = groupedAbove, groupedBelow = groupedBelow))
                     .background(BobColors.BotBubble)
+                    .messageActions(m, onLongPress)
                     .padding(horizontal = 14.dp, vertical = 9.dp),
             ) {
                 MarkdownBody(m.text, color = if (m.interim) BobColors.TextMuted else BobColors.Text, hug = !m.streaming)
@@ -364,6 +395,45 @@ private fun DelegationCard(d: ChatItem.Delegation, profile: String) {
             }
             if (!d.lastText.isNullOrBlank() && running) { Spacer(Modifier.height(4.dp)); Text(d.lastText, style = MaterialTheme.typography.bodySmall, color = BobColors.TextMuted, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             if (!d.summary.isNullOrBlank()) { Spacer(Modifier.height(6.dp)); MarkdownBody(d.summary, color = BobColors.Text) }
+        }
+    }
+}
+
+/**
+ * A run of working steps, folded into one quiet line: "Worked for 40s · 5 steps". Tapping opens the
+ * very same step rows the transcript used to show inline, so nothing is lost, only put away.
+ */
+@Composable
+fun WorkRow(entry: Entry.Run, profile: String, live: Boolean) {
+    // Saved per run, keyed by its first item, so scrolling away does not re-collapse what you opened.
+    var open by rememberSaveable(key = "work-" + entry.key) { mutableStateOf(false) }
+    val duration = remember(entry.items) { runDurationS(entry.items) }
+    Column(Modifier.fillMaxWidth().padding(end = 24.dp)) {
+        Row(
+            Modifier.clip(RoundedCornerShape(12.dp)).clickable { open = !open }.padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (live) CircularProgressIndicator(Modifier.size(11.dp), strokeWidth = 1.5.dp, color = BobColors.Amber)
+            else Icon(Icons.Outlined.Build, null, tint = BobColors.TextFaint, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(6.dp))
+            Column(Modifier.weight(1f, fill = false)) {
+                Text(
+                    workedLabel(entry.items.size, duration, live),
+                    style = MaterialTheme.typography.labelMedium, color = if (live) BobColors.Amber else BobColors.TextFaint,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                // While it runs, the latest step is the only progress the reader can see.
+                val latest = if (live && !open) stepLabel(entry.items.last()) else ""
+                if (latest.isNotBlank()) {
+                    Text(latest, style = MaterialTheme.typography.labelSmall, color = BobColors.TextFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Icon(if (open) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, tint = BobColors.TextFaint, modifier = Modifier.size(14.dp))
+        }
+        AnimatedVisibility(open) {
+            Column(Modifier.padding(start = 4.dp, top = 2.dp)) {
+                entry.items.forEach { step -> key(step.id) { MessageItem(step, profile) } }
+            }
         }
     }
 }

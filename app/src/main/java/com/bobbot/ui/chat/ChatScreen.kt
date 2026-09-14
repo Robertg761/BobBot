@@ -27,11 +27,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.MoreVert
@@ -69,6 +72,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -115,17 +120,21 @@ fun ChatScreen(
     val items = session?.items ?: emptyList()
     var renaming by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    /** The bubble a long-press opened the actions sheet for. */
+    var actionsFor by remember { mutableStateOf<ChatItem?>(null) }
 
     val color = botColor(profile)
     val botLabel = botName(profile)
     val isMain = mainConversation || ui.isMain
     val title = if (isMain) botLabel else session?.title?.ifBlank { null } ?: botLabel
 
+    // Working steps are folded into one row each, so the list is built from entries, not raw items.
+    val entries = remember(items) { groupChatItems(items) }
     val lastAssistant = items.lastOrNull() as? ChatItem.Assistant
     val showTyping = session?.isBusy == true && !(lastAssistant != null && lastAssistant.streaming && lastAssistant.text.isNotBlank())
     val prompt = session?.approval != null || session?.clarify != null || session?.secret != null
     val extra = (if (showTyping) 1 else 0) + (if (prompt) 1 else 0) + 1
-    val lastIndex = (if (items.isEmpty()) 1 else 0) + items.size + extra - 1
+    val lastIndex = (if (items.isEmpty()) 1 else 0) + entries.size + extra - 1
 
     // Follow the conversation like a messages app: animate once when something new arrives, snap
     // without animation while a reply streams, and stop following as soon as the user scrolls up.
@@ -154,15 +163,17 @@ fun ChatScreen(
                         Spacer(Modifier.width(10.dp))
                         Column {
                             Text(title, style = MaterialTheme.typography.titleMedium, color = BobColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            val (status, statusColor) = when {
+                            // Only what is happening right now goes under the name; the model lives in the ⋮ menu.
+                            val status = when {
                                 ui.socket != SocketState.CONNECTED -> "Reconnecting…" to BobColors.TextFaint
                                 session?.status == "starting" -> "Starting up…" to BobColors.TextMuted
                                 session?.status == "waiting" -> "Needs your input" to BobColors.Rose
                                 session?.isBusy == true -> (session.statusLine?.takeIf { it.isNotBlank() } ?: "Working…") to BobColors.Amber
+                                // A task chat is titled after the task, so say whose chat it is; the ongoing chat already is the bot.
                                 !isMain -> botLabel to color
-                                else -> (session?.model?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "Online") to BobColors.TextMuted
+                                else -> null
                             }
-                            Text(status, style = MaterialTheme.typography.labelSmall, color = statusColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (status != null) Text(status.first, style = MaterialTheme.typography.labelSmall, color = status.second, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 },
@@ -233,21 +244,35 @@ fun ChatScreen(
                     }
                     LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), modifier = Modifier.fillMaxSize()) {
                     if (items.isEmpty()) item(key = "intro") { Intro(profile, ui.bot?.description) }
-                    items.forEachIndexed { i, item ->
-                        val above = items.getOrNull(i - 1)
-                        val below = items.getOrNull(i + 1)
-                        val groupedAbove = sameSender(above, item)
-                        val groupedBelow = sameSender(item, below)
-                        // Tool and system lines carry no time; the last timed entry decides whether a new day started.
-                        val previousTimed = if (i == 0) null else items.subList(0, i).lastOrNull { it.at != null }
-                        item(key = item.id) {
-                            val at = item.at
-                            if (at != null && startsNewDay(previousTimed, item)) DaySeparator(dayLabel(at))
-                            else Spacer(Modifier.height(if (i == 0) 0.dp else gapBetween(groupedAbove)))
-                            MessageItem(item, profile, groupedAbove, groupedBelow)
-                            val settled = item is ChatItem.User || item is ChatItem.Teammate || (item is ChatItem.Assistant && !item.streaming && item.text.isNotBlank())
-                            if (at != null && !groupedBelow && settled) TimeLabel(at, mine = item is ChatItem.User)
+                    // Tool and system lines carry no time; the last timed entry decides whether a new day started.
+                    var previousTimed: ChatItem? = null
+                    entries.forEachIndexed { i, entry ->
+                        val timedBefore = previousTimed
+                        when (entry) {
+                            is Entry.Run -> {
+                                val live = session?.isBusy == true && i == entries.lastIndex
+                                item(key = entry.key) {
+                                    Spacer(Modifier.height(if (i == 0) 0.dp else gapBetween(false)))
+                                    WorkRow(entry, profile, live)
+                                }
+                            }
+                            is Entry.Single -> {
+                                val msg = entry.item
+                                val above = (entries.getOrNull(i - 1) as? Entry.Single)?.item
+                                val below = (entries.getOrNull(i + 1) as? Entry.Single)?.item
+                                val groupedAbove = sameSender(above, msg)
+                                val groupedBelow = sameSender(msg, below)
+                                item(key = msg.id) {
+                                    val at = msg.at
+                                    if (at != null && startsNewDay(timedBefore, msg)) DaySeparator(dayLabel(at))
+                                    else Spacer(Modifier.height(if (i == 0) 0.dp else gapBetween(groupedAbove)))
+                                    MessageItem(msg, profile, groupedAbove, groupedBelow, onLongPress = { if (messageText(it).isNotBlank()) actionsFor = it })
+                                    val settled = msg is ChatItem.User || msg is ChatItem.Teammate || (msg is ChatItem.Assistant && !msg.streaming && msg.text.isNotBlank())
+                                    if (at != null && !groupedBelow && settled) TimeLabel(at, mine = msg is ChatItem.User)
+                                }
+                            }
                         }
+                        previousTimed = entry.items.lastOrNull { it.at != null } ?: previousTimed
                     }
                     if (showTyping) item(key = "typing") {
                         Spacer(Modifier.height(if (items.isEmpty()) 0.dp else 12.dp))
@@ -293,6 +318,14 @@ fun ChatScreen(
                 Spacer(Modifier.height(12.dp))
             }
         }
+    }
+    actionsFor?.let { target ->
+        MessageActionsSheet(
+            item = target,
+            onDismiss = { actionsFor = null },
+            onCopied = { vm.toast("Copied") },
+            onSendAgain = vm::resend,
+        )
     }
     if (renaming) {
         var t by remember(session?.title) { mutableStateOf(session?.title ?: "") }
@@ -380,6 +413,54 @@ private fun Intro(profile: String, description: String?) {
         }
         Spacer(Modifier.height(10.dp))
         Text("This is the start of your conversation with ${botName(profile)}.", color = BobColors.TextFaint, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+    }
+}
+
+/** The raw text behind a bubble, the thing worth copying or sending again. */
+private fun messageText(item: ChatItem): String = when (item) {
+    is ChatItem.User -> item.text
+    is ChatItem.Assistant -> item.text
+    is ChatItem.Teammate -> item.text
+    else -> ""
+}
+
+/**
+ * Long-press actions for one message. No delete: Hermes keeps the transcript server-side and has
+ * no per-message delete, so offering one would lie.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MessageActionsSheet(item: ChatItem, onDismiss: () -> Unit, onCopied: () -> Unit, onSendAgain: (String) -> Unit) {
+    val ctx = LocalContext.current
+    val text = messageText(item)
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = BobColors.SurfaceRaised) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
+            SheetAction(Icons.Outlined.ContentCopy, "Copy") {
+                val clip = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clip?.setPrimaryClip(android.content.ClipData.newPlainText("message", text))
+                onCopied()
+                onDismiss()
+            }
+            SheetAction(Icons.Outlined.Share, "Share") {
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_TEXT, text)
+                }
+                runCatching { ctx.startActivity(android.content.Intent.createChooser(send, null)) }
+                onDismiss()
+            }
+            // Only your own words can be said again; attachments are not repeated.
+            if (item is ChatItem.User) SheetAction(Icons.Outlined.Refresh, "Send again") { onSendAgain(text); onDismiss() }
+        }
+    }
+}
+
+@Composable
+private fun SheetAction(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = BobColors.TextMuted)
+        Spacer(Modifier.width(16.dp))
+        Text(label, color = BobColors.Text, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
