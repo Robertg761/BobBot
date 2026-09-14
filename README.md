@@ -24,7 +24,7 @@ BobBot is laid out like a messages app, in the spirit of xAI's Grok Bot: bots ar
 
 ## Requirements on the computer
 
-- Hermes Agent 0.21.2+ with the dashboard running and reachable from the phone, e.g. `hermes dashboard --host 0.0.0.0 --port 9119`. A non-loopback bind requires an auth provider (Nous OAuth is what this app expects); the app discovers `auth_flows` from `/api/status` and needs `native_pkce`.
+- Hermes Agent 0.21.2+ with the dashboard running and reachable from the phone, e.g. `hermes dashboard --host 0.0.0.0 --port 9119`. To reach it from any network, put a Cloudflare tunnel (or another reverse proxy) in front of it and give BobBot the `https://` hostname; the dashboard's own sign-in still applies. A non-loopback bind requires an auth provider (Nous OAuth is what this app expects); the app discovers `auth_flows` from `/api/status` and needs `native_pkce`.
 - For push notifications: nothing extra. Setup enables the built-in `ntfy` messaging platform on Hermes with a generated private topic. Bots and automations that deliver to `ntfy` land on the phone.
 - For the Network tab: the bundled kanban plugin (`kanban.db` present in `~/.hermes`).
 

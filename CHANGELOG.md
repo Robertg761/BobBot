@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.1] - 2026-09-14
+
+### Fixed
+- An `https://` server address no longer gets port 9119 appended. A tunnel or reverse proxy on 443 (for example a Cloudflare tunnel in front of the dashboard) now works by typing just the hostname. Plain `http://` addresses and bare hosts still default to 9119.
+
 ## [1.3.0] - 2026-09-14
 
 ### Added

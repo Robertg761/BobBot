@@ -80,7 +80,7 @@ class SetupViewModel @Inject constructor(
     }
 
     fun checkServer() {
-        val normalized = client.normalizeBaseUrl(_ui.value.url)
+        val normalized = HermesClient.normalizeBaseUrl(_ui.value.url)
         if (normalized == null) { _ui.update { it.copy(error = "Enter a valid address like 192.168.1.20:9119") }; return }
         viewModelScope.launch {
             _ui.update { it.copy(checking = true, error = null) }

@@ -41,18 +41,6 @@ class HermesClient @Inject constructor(
 
     suspend fun baseUrl(): String = tokens.baseUrl().ifBlank { throw NotConfiguredException() }
 
-    fun normalizeBaseUrl(raw: String): String? {
-        var s = raw.trim()
-        if (s.isEmpty()) return null
-        if (!s.startsWith("http://") && !s.startsWith("https://")) s = "http://$s"
-        val url = s.toHttpUrlOrNull() ?: return null
-        // Default port 9119 when none is specified for a bare host.
-        val withPort = if (url.port == HttpUrl.defaultPort(url.scheme) && !raw.contains(":${url.port}")) {
-            url.newBuilder().port(9119).build()
-        } else url
-        return withPort.toString().trimEnd('/')
-    }
-
     suspend fun url(path: String, query: Map<String, String?> = emptyMap()): HttpUrl {
         val base = baseUrl().toHttpUrlOrNull() ?: throw NotConfiguredException()
         val b = base.newBuilder().encodedPath(path)
@@ -143,6 +131,19 @@ class HermesClient @Inject constructor(
     }
 
     companion object {
+    fun normalizeBaseUrl(raw: String): String? {
+        var s = raw.trim()
+        if (s.isEmpty()) return null
+        val explicitScheme = s.startsWith("http://") || s.startsWith("https://")
+        if (!explicitScheme) s = "http://$s"
+        val url = s.toHttpUrlOrNull() ?: return null
+        // Default port 9119 for a bare host or plain http without a port. An https address is a
+        // tunnel or reverse proxy on 443, which is what the user meant.
+        val assumeDashboardPort = url.port == HttpUrl.defaultPort(url.scheme) && !raw.contains(":${url.port}") && url.scheme == "http"
+        val withPort = if (assumeDashboardPort) url.newBuilder().port(9119).build() else url
+        return withPort.toString().trimEnd('/')
+    }
+
         fun buildOkHttp(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)

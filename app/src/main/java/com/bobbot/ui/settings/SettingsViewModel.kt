@@ -122,7 +122,7 @@ class SettingsViewModel @Inject constructor(
 
     fun saveBaseUrl(raw: String) {
         viewModelScope.launch {
-            val normalized = client.normalizeBaseUrl(raw)
+            val normalized = HermesClient.normalizeBaseUrl(raw)
             if (normalized == null) {
                 _state.update { it.copy(error = "That doesn't look like a server address") }
                 return@launch
