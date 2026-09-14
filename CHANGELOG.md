@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.1] - 2026-09-14
+
+### Fixed
+- Creating a bot no longer fails with HTTP 422 on Hermes 0.21.2. Cloned bots retain their inherited skills.
+
 ## [1.1.0] - 2026-09-14
 
 ### Added

@@ -55,6 +55,7 @@ select a different existing authority and enable or disable team review.
 ```sh
 python3 -m unittest discover -s server/tests -v
 PYTHONPATH=/path/to/hermes-agent /path/to/hermes-agent/venv/bin/python server/tests/integration_hermes.py
+PYTHONPATH=/path/to/hermes-agent /path/to/hermes-agent/venv/bin/python server/tests/integration_profile_create.py
 hermes plugins validate server/bobbot-team
 ```
 

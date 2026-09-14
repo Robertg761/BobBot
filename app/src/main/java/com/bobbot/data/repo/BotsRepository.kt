@@ -47,13 +47,13 @@ class BotsRepository @Inject constructor(private val api: HermesApi, private val
         model: String?,
         cloneFrom: String? = null,
         soul: String? = null,
-        keepSkills: Boolean = true,
     ): JsonElement {
         val r = api.createBot(
             jsonOf(
                 "name" to name, "description" to description,
                 "provider" to provider, "model" to model,
-                "clone_from" to cloneFrom, "keep_skills" to keepSkills,
+                "clone_from" to cloneFrom,
+                // Omit keep_skills to retain inherited skills. Hermes expects a list, not a flag.
             ),
         )
         val persona = soul?.trim()?.takeIf { it.isNotBlank() }
