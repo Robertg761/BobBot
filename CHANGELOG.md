@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.3.4] - 2026-09-14
+
+Everything in this release comes out of a deep audit of the app and the team extension, run part by part (inbox and groups, chat and streaming, background link and notifications, the Hermes plugin).
+
+### Fixed
+- **Notifications name the bot.** Every notification carries the bot's display name (persona or nickname): completions, scheduled results, bot-to-bot hand-offs, reply confirmations, and ntfy pushes. Names are cached on the phone, so the link service names bots correctly straight after a reboot, before the app has loaded anything.
+- **Messages from a bot stack as one conversation.** A bot that sends several messages updates one notification thread instead of piling up separate ones; a reply from the shade clears that thread.
+- **The background link stays up on Android 15 and 16.** It now runs as a "special use" foreground service; the previous type was cut off after six hours a day. If Android refuses to promote it, it stops cleanly instead of crashing the process, and stopping the link from the notification also drops the socket when the app is closed.
+- **Streaming is cheaper and steadier.** Deltas are batched about every 50 ms instead of one state update per token; long transcripts are projected off the main thread; every streamed bubble carries a timestamp so day separators and time labels stay right; a failed send removes the phantom message and restores its attachments instead of leaving it looking sent.
+- **A bad event can no longer stop all chats.** One malformed frame used to end the event pump for every open conversation. Unscoped events are only attributed when there is exactly one place they can belong.
+- **Reconnects no longer multiply.** The socket keeps a single reconnect loop; a second "closed" callback for the same connection is ignored. Access tokens are URL-encoded in the WebSocket handshake.
+- **Photos attach without freezing.** Images are decoded, downscaled to 2048 px and JPEG-compressed off the main thread, so a raw phone photo no longer builds a tens-of-megabytes frame on the UI thread.
+- Polling (inbox, group chats, team, permission cards) pauses while the app is in the background and stops on leaving a screen.
+- The composer stays typeable during a socket blip; only sending waits for the connection. The rename dialog seeds from the current title. Two identical toasts in a row both show.
+- Session-token installs (loopback, no auth) work from the link service and reply receiver too; the token mode is restored on first use rather than only when an activity starts.
+- Request paths are encoded segment by segment; a server address with a path is rejected at setup instead of silently failing every request. Boot restarts and shade replies no longer block the main thread; a shade reply gives up after eight seconds.
+- Inbox: a group with activity you have never opened counts as unread; a group with no activity yet does not. Duplicate sessions, rooms, members and tasks are filtered out before they reach a list.
+
+### Team extension 0.3.2
+- The acting profile is captured when the plugin registers, so a specialist on a thread that lost its home context can no longer be mistaken for the authority (which silently disabled review). The guidance text uses the profile Hermes hands it.
+- The kill switch is checked before anything that can fail, so a broken install can always be turned off.
+- Undecided requests that time out are marked expired, their review card is closed, and a fresh request replaces them; denials stay on record for a week so the same action is not quietly re-asked an hour later.
+- The nudge that tells a bot its decision runs with a scrubbed environment: no kanban worker identity, no chat session, no cron delivery target from whoever decided; its stderr goes to the profile's logs.
+- Review tasks target the request's own board even from inside another board's worker, and get ten minutes instead of three.
+- `todo_list` and `kanban_attachments` pass without review (the old list named a toolset, so every planning call was stopped). A moved extension re-points its symlink instead of failing setup. Creating a bot no longer copies the authority's private memories; model and provider must be given together.
+- A decision that landed but whose follow-up failed now returns the decision with a note instead of an error.
+
 ## [1.3.3] - 2026-09-14
 
 ### Fixed

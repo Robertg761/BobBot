@@ -28,7 +28,7 @@ data class GroupRoom(
         fun from(j: JsonElement): GroupRoom = GroupRoom(
             id = j.str("room_id") ?: "",
             name = j.str("name") ?: "",
-            members = j.list("members").mapNotNull { it.str("profile") ?: it.str("member_id") },
+            members = j.list("members").mapNotNull { it.str("profile") ?: it.str("member_id") }.distinct(),
             updatedAt = j.dbl("updated_at") ?: j.dbl("created_at") ?: 0.0,
             latestSeq = j.long("latest_seq") ?: 0L,
             disbanded = j.child("disbanded_at") != null,
@@ -81,7 +81,7 @@ class GroupsRepository @Inject constructor(private val socket: GatewaySocket) {
         if (e.code == -32601) false else throw e
     }
 
-    suspend fun rooms(): List<GroupRoom> = rpc("groups.list").list("rooms").map(GroupRoom::from).filterNot { it.disbanded }
+    suspend fun rooms(): List<GroupRoom> = rpc("groups.list").list("rooms").map(GroupRoom::from).filterNot { it.disbanded }.filter { it.id.isNotBlank() }.distinctBy { it.id }
 
     suspend fun create(roomId: String, profiles: List<String>, name: String) {
         require(profiles.size in 2..6) { "Choose between two and six bots." }

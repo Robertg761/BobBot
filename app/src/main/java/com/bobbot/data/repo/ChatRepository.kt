@@ -147,7 +147,8 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
     val socketState: StateFlow<com.bobbot.core.net.SocketState> get() = socket.state
 
     init {
-        scope.launch { socket.events.collect { onEvent(it) } }
+        // One bad frame must never end the pump for every open chat.
+        scope.launch { socket.events.collect { ev -> runCatching { onEvent(ev) }.onFailure { Log.e("ChatRepo", "event ${ev.type} failed", it) } } }
         scope.launch { socket.connected.collect { onReconnected() } }
     }
 
@@ -156,6 +157,9 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
     fun liveFor(storedId: String): String? = storedToLive[storedId]
 
     suspend fun connect() = socket.ensureConnected()
+
+    /** Drop the socket and stop its reconnect loop; the next call re-opens it on demand. */
+    fun disconnect() = socket.close()
 
     private val mainConversations = MainConversationResolver()
 
@@ -217,7 +221,8 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
             jsonOf("session_id" to storedId, "cols" to 100, "profile" to profile.takeIf { it.isNotBlank() && it != "default" }),
         )
         val live = r.str("session_id") ?: throw IllegalStateException("session.resume returned no id")
-        val items = r.list("messages").mapNotNull { historyItem(it) }.toMutableList()
+        // A long transcript takes real work to project; keep it off the main thread.
+        val items = kotlinx.coroutines.withContext(Dispatchers.Default) { r.list("messages").mapNotNull { historyItem(it) } }.toMutableList()
         val st = sessions.getOrPut(live) { MutableStateFlow(ChatSessionState(liveId = live, profile = profile)) }
         st.update {
             it.copy(
@@ -264,34 +269,37 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
 
     suspend fun send(liveId: String, text: String) {
         val st = sessions[liveId] ?: throw IllegalStateException("unknown session")
-        st.update { it.copy(items = it.items + ChatItem.User(newId(), text, images = it.attachments, at = System.currentTimeMillis()), attachments = emptyList(), error = null, status = "working") }
+        val bubble = ChatItem.User(newId(), text, images = st.value.attachments, at = System.currentTimeMillis())
+        val attachments = st.value.attachments
+        st.update { it.copy(items = it.items + bubble, attachments = emptyList(), error = null, status = "working") }
         try {
             socket.call("prompt.submit", jsonOf("session_id" to liveId, "text" to text))
-        } catch (e: RpcException) {
-            st.update { it.copy(error = e.message, status = "idle") }
+        } catch (e: Exception) {
+            // Any failure (RPC error, socket gone, timeout): the message was not sent, so it must not look sent.
+            st.update { it.copy(items = it.items.filterNot { i -> i.id == bubble.id }, attachments = attachments, error = e.message ?: "Send failed", status = "idle") }
             throw e
         }
     }
 
     suspend fun interrupt(liveId: String) {
         runCatching { socket.call("session.interrupt", jsonOf("session_id" to liveId)) }
-        sessions[liveId]?.update { it.copy(status = "idle", approval = null, clarify = null) }
+        sessions[liveId]?.update { it.copy(status = "idle", approval = null, clarify = null, secret = null) }
     }
 
     suspend fun respondApproval(liveId: String, choice: String) {
         socket.call("approval.respond", jsonOf("session_id" to liveId, "choice" to choice, "all" to false))
-        sessions[liveId]?.update { it.copy(approval = null) }
+        sessions[liveId]?.update { it.copy(approval = null, status = "working") }
     }
 
     suspend fun respondClarify(liveId: String, requestId: String, answer: String) {
         socket.call("clarify.respond", jsonOf("session_id" to liveId, "request_id" to requestId, "answer" to answer))
-        sessions[liveId]?.update { it.copy(clarify = null) }
+        sessions[liveId]?.update { it.copy(clarify = null, status = "working") }
     }
 
     suspend fun respondSecret(liveId: String, requestId: String, kind: String, value: String) {
         val (method, key) = when (kind) { "sudo" -> "sudo.respond" to "password"; else -> "secret.respond" to "value" }
         socket.call(method, jsonOf("session_id" to liveId, "request_id" to requestId, key to value))
-        sessions[liveId]?.update { it.copy(secret = null) }
+        sessions[liveId]?.update { it.copy(secret = null, status = "working") }
     }
 
     suspend fun attachImage(liveId: String, base64: String, filename: String) {
@@ -320,10 +328,11 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
     suspend fun close(liveId: String) {
         runCatching { socket.call("session.close", jsonOf("session_id" to liveId)) }
         sessions.remove(liveId)?.value?.storedId?.let { storedToLive.remove(it) }
+        if (focusedLive == liveId) focusedLive = null
         syncRoster()
     }
 
-    fun forget(liveId: String) { sessions.remove(liveId)?.value?.storedId?.let { storedToLive.remove(it) }; syncRoster() }
+    fun forget(liveId: String) { sessions.remove(liveId)?.value?.storedId?.let { storedToLive.remove(it) }; if (focusedLive == liveId) focusedLive = null; syncRoster() }
 
     // ---- reconnect ----
     private suspend fun onReconnected() {
@@ -353,8 +362,13 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
         if (t == "gateway.ready" || t == "skin.changed") return
         var live = ev.sessionId.takeIf { it.isNotBlank() }
         if (live == null) {
-            if (t.startsWith("subagent.")) return  // never attribute unscoped subagent events
-            live = focusedLive ?: return
+            // Unscoped frames are only safe to attribute when there is exactly one place they can belong.
+            if (t.startsWith("subagent.") || t.startsWith("message.") || t.startsWith("tool.")) {
+                if (sessions.size != 1) return
+                live = sessions.keys.first()
+            } else {
+                live = focusedLive ?: return
+            }
         }
         val st = sessions[live] ?: return
         if (t == "message.start") focusedLive = live
@@ -367,7 +381,9 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
             "message.start" -> st.update { it.copy(status = "streaming", statusLine = null, items = it.items + ChatItem.Assistant(newId(), "", model = it.model, at = System.currentTimeMillis())) }
             "message.delta" -> {
                 val text = p.str("text") ?: return
-                st.update { s -> s.copy(status = "streaming", items = s.items.appendToStreaming { a -> a.copy(text = a.text + text) }) }
+                // Coalesce: a long reply arrives as thousands of tiny frames; one state update per ~50 ms is plenty.
+                pendingDelta.getOrPut(st.value.liveId) { StringBuilder() }.append(text)
+                scheduleDeltaFlush(st)
             }
             "reasoning.delta", "reasoning.available" -> {
                 val text = p.str("text") ?: return
@@ -375,16 +391,19 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
             }
             "thinking.delta" -> st.update { it.copy(statusLine = p.str("text")) }
             "message.interim" -> {
+                flushDeltas(st)
                 val text = p.str("text") ?: return
                 val already = p.bool("already_streamed") ?: false
                 st.update { s ->
                     val items = if (already) s.items.appendToStreaming { a -> a.copy(interim = true, streaming = false, status = "complete") }
                     else s.items.appendToStreaming { a -> a.copy(text = text, interim = true, streaming = false, status = "complete") }
                     // open a new streaming bubble for what follows
-                    s.copy(items = items + ChatItem.Assistant(newId(), "", model = s.model))
+                    s.copy(items = items + ChatItem.Assistant(newId(), "", model = s.model, at = System.currentTimeMillis()))
                 }
             }
             "message.complete" -> {
+                flushDeltas(st)
+                if (focusedLive == st.value.liveId) focusedLive = null
                 val text = p.str("text") ?: ""
                 val status = p.str("status") ?: "complete"
                 val err = p.str("error")
@@ -407,6 +426,7 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
                 _completions.tryEmit(CompletionNotice(s.liveId, s.storedId, s.profile, s.title, text.take(160), status))
             }
             "error" -> {
+                flushDeltas(st)
                 val msg = p.str("message") ?: "Unknown error"
                 st.update { it.copy(error = msg, status = "idle", items = it.items.appendToStreaming { a -> a.copy(streaming = false, status = "error", error = msg) }) }
                 val s = st.value
@@ -509,7 +529,28 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
     private fun List<ChatItem>.appendToStreaming(f: (ChatItem.Assistant) -> ChatItem.Assistant): List<ChatItem> {
         val idx = indexOfLast { it is ChatItem.Assistant && it.streaming }
         return if (idx >= 0) toMutableList().also { it[idx] = f(it[idx] as ChatItem.Assistant) }
-        else this + f(ChatItem.Assistant(newId(), ""))
+        else this + f(ChatItem.Assistant(newId(), "", at = System.currentTimeMillis()))
+    }
+
+    // ---- delta coalescing ----
+    private val pendingDelta = ConcurrentHashMap<String, StringBuilder>()
+    private val flushScheduled = ConcurrentHashMap<String, Boolean>()
+
+    private fun scheduleDeltaFlush(st: MutableStateFlow<ChatSessionState>) {
+        val live = st.value.liveId
+        if (flushScheduled.putIfAbsent(live, true) != null) return
+        scope.launch {
+            kotlinx.coroutines.delay(50)
+            flushScheduled.remove(live)
+            flushDeltas(st)
+        }
+    }
+
+    private fun flushDeltas(st: MutableStateFlow<ChatSessionState>) {
+        val sb = pendingDelta.remove(st.value.liveId) ?: return
+        val text = sb.toString()
+        if (text.isEmpty()) return
+        st.update { s -> s.copy(status = "streaming", items = s.items.appendToStreaming { a -> a.copy(text = a.text + text) }) }
     }
 
     private fun newId() = UUID.randomUUID().toString()

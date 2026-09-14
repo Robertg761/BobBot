@@ -20,6 +20,20 @@ class ReadOnlyTest(unittest.TestCase):
         self.assertFalse(wake.is_read_only('terminal', {'command': 'ls'}))
 
 
+class NudgeEnvTest(unittest.TestCase):
+    def test_deciding_context_never_reaches_the_specialist(self):
+        base = {'PATH': '/usr/bin', 'HOME': '/home/x', 'HERMES_HOME': '/home/x/.hermes/profiles/clove',
+                'HERMES_KANBAN_TASK': 't1', 'HERMES_KANBAN_DB': '/x/kanban.db', 'HERMES_KANBAN_BOARD': 'main',
+                'HERMES_PROFILE': 'clove', 'HERMES_TURN_AUTHOR': '{"id":"bot:clove"}', 'TERMINAL_CWD': '/x/ws',
+                'HERMES_SESSION_ID': 's', 'HERMES_SESSION_PLATFORM': 'telegram', 'HERMES_SESSION_CHAT_ID': '42',
+                'HERMES_CRON_AUTO_DELIVER_PLATFORM': 'telegram', 'HERMES_TUI': '1'}
+        env = wake.nudge_env(base)
+        self.assertEqual(env.get('PATH'), '/usr/bin')
+        for key in base:
+            if key.startswith(('HERMES_KANBAN_', 'HERMES_SESSION_', 'HERMES_CRON_')) or key in ('HERMES_PROFILE', 'HERMES_TURN_AUTHOR', 'TERMINAL_CWD', 'HERMES_TUI'):
+                self.assertNotIn(key, env, key)
+
+
 class NudgeTextTest(unittest.TestCase):
     def test_approval_reads_like_a_dm_from_the_authority(self):
         text = wake.nudge_text({'id': 'abc', 'status': 'approved', 'reason': 'Bounded read.'}, 'default')

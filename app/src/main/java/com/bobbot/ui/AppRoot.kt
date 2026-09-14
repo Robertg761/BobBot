@@ -80,7 +80,7 @@ fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
             composable<Route.Home> {
                 InboxScreen(
                     InboxActions(
-                        openBot = { nav.openBotChat(it) },
+                        openBot = { nav.openBotChat(it, fromHome = true) },
                         openTaskChat = { sid, prof -> nav.navigate(Route.Chat(sid, prof)) },
                         openGroup = { nav.navigate(Route.Group(it)) },
                         openBotProfile = { nav.navigate(Route.BotDetail(it)) },
@@ -158,10 +158,13 @@ fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
     }
 }
 
-/** A bot's ongoing conversation sits directly above the inbox, never stacked on itself. */
-private fun NavHostController.openBotChat(profile: String) {
+/**
+ * Open a bot's ongoing conversation. From the inbox it sits directly above Home; from any other
+ * screen (Team, Board, Automations, a profile) it stacks on top so Back returns there.
+ */
+private fun NavHostController.openBotChat(profile: String, fromHome: Boolean = false) {
     navigate(Route.Chat(profile = profile, mainConversation = true)) {
-        popUpTo(Route.Home)
+        if (fromHome) popUpTo(Route.Home)
         launchSingleTop = true
     }
 }

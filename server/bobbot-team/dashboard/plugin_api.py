@@ -48,10 +48,16 @@ def decide(ident: str, body: Decision):
     try:
         reason = body.reason.strip() or ('Allowed by Robert in BobBot' if body.choice == 'approved' else 'Denied by Robert in BobBot')
         row = team.store().decide(ident, body.choice, reason, 'you', human=True, scope=body.scope)
-        team.wake_request(row)
-        return row
     except (ValueError, PermissionError) as exc:
         raise HTTPException(409, str(exc)) from exc
+    # The decision is committed; failing to wake the bot or close its card must not read as a failed decision.
+    try:
+        team.wake_request(row)
+    except Exception as exc:
+        import logging
+        logging.getLogger('bobbot-team').warning('bobbot-team: post-decision follow-up failed for %s: %s', ident, exc)
+        row = {**row, 'follow_up_error': str(exc)}
+    return row
 
 
 @router.post('/profiles/{profile}/bootstrap')
@@ -62,6 +68,8 @@ def bootstrap(profile: str):
         raise HTTPException(400, str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(409 if 'different team extension' in str(exc) else 500, str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(500, f'Could not link the team extension: {exc}') from exc
     return {'configured': True}
 
 

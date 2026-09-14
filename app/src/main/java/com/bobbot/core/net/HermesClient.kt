@@ -43,7 +43,8 @@ class HermesClient @Inject constructor(
 
     suspend fun url(path: String, query: Map<String, String?> = emptyMap()): HttpUrl {
         val base = baseUrl().toHttpUrlOrNull() ?: throw NotConfiguredException()
-        val b = base.newBuilder().encodedPath(path)
+        // Segments are encoded one by one so a session id or profile with odd characters cannot break the request.
+        val b = base.newBuilder().encodedPath("/").addPathSegments(path.trimStart('/'))
         query.forEach { (k, v) -> if (!v.isNullOrEmpty()) b.addQueryParameter(k, v) }
         return b.build()
     }
@@ -137,6 +138,8 @@ class HermesClient @Inject constructor(
         val explicitScheme = s.startsWith("http://") || s.startsWith("https://")
         if (!explicitScheme) s = "http://$s"
         val url = s.toHttpUrlOrNull() ?: return null
+        // Hermes serves from the root; a pasted deep link ("…/api/health") would silently 404 everything.
+        if (url.encodedPath.trimEnd('/').isNotEmpty() || url.query != null || url.fragment != null) return null
         // Default port 9119 for a bare host or plain http without a port. An https address is a
         // tunnel or reverse proxy on 443, which is what the user meant.
         val assumeDashboardPort = url.port == HttpUrl.defaultPort(url.scheme) && !raw.contains(":${url.port}") && url.scheme == "http"

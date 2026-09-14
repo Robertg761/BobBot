@@ -51,9 +51,11 @@ class GatewaySocket @Inject constructor(
     private val connectLock = Mutex()
     private val ids = AtomicLong(1)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JsonElement>>()
-    private var ws: WebSocket? = null
-    private var manuallyClosed = false
-    private var generation = 0
+    @Volatile private var ws: WebSocket? = null
+    @Volatile private var manuallyClosed = false
+    @Volatile private var generation = 0
+    /** The single reconnect loop; onClosed can fire twice per failure (onFailure and onClosed). */
+    @Volatile private var reconnectJob: kotlinx.coroutines.Job? = null
 
     private val _state = MutableStateFlow(SocketState.DISCONNECTED)
     val state: StateFlow<SocketState> = _state
@@ -123,7 +125,7 @@ class GatewaySocket @Inject constructor(
             val t = client.post("/api/auth/ws-ticket").str("ticket") ?: throw IOException("Could not mint a WebSocket ticket")
             "ticket=$t"
         } else {
-            "token=${tokens.accessToken()}"
+            "token=" + java.net.URLEncoder.encode(tokens.accessToken(), "UTF-8")
         }
         return "$scheme://$host/api/ws?$cred"
     }
@@ -149,11 +151,12 @@ class GatewaySocket @Inject constructor(
 
     private fun onClosed(gen: Int, code: Int, reason: String) {
         if (gen != generation) return
+        generation++  // consume this generation so a second callback for the same socket is ignored
         _state.value = SocketState.DISCONNECTED
         val err = IOException("Connection closed ($code): $reason")
         pending.values.forEach { it.completeExceptionally(err) }
         pending.clear()
-        if (!manuallyClosed) scope.launch { reconnectLoop() }
+        if (!manuallyClosed && reconnectJob?.isActive != true) reconnectJob = scope.launch { reconnectLoop() }
     }
 
     private suspend fun reconnectLoop() {

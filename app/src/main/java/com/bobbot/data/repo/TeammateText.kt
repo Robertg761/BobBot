@@ -23,6 +23,7 @@ object TeammateText {
             val body = text.substring(m.range.last + 1).trim()
             return Parsed(profileOf(m.groupValues[1]), body, reply = false)
         }
+        if (!text.startsWith("[IMPORTANT: Background process")) return null
         completion.find(text)?.let { m ->
             val command = m.groupValues[1]
             if (!botChat.containsMatchIn(command)) return null

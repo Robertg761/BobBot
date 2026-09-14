@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -656,8 +657,7 @@ fun BotDetailScreen(
                     }
                 }
             } else {
-                items(ui.sessions.size, key = { i -> "s-" + ui.sessions[i].id }) { i ->
-                    val s = ui.sessions[i]
+                items(ui.sessions, key = { "s-" + it.id }) { s ->
                     SessionRow(s) { onOpenSession(s.id, name) }
                 }
             }
@@ -725,7 +725,7 @@ fun BotDetailScreen(
     }
 
     if (editingRole) {
-        var value by remember { mutableStateOf(ui.role) }
+        var value by remember(ui.role) { mutableStateOf(ui.role) }
         AlertDialog(
             onDismissRequest = { editingRole = false },
             containerColor = BobColors.SurfaceRaised,

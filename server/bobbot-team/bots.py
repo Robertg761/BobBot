@@ -27,6 +27,12 @@ def _read_yaml(path):
 
 
 def _write_yaml(path, data):
+    try:
+        from utils import atomic_yaml_write  # Hermes' own writer for this file, so edits serialise with the dashboard's
+        atomic_yaml_write(path, data, sort_keys=False)
+        return
+    except ImportError:
+        pass
     import yaml
     tmp = path.with_suffix('.yaml.tmp')
     tmp.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding='utf-8')
@@ -49,8 +55,9 @@ def set_bot_mode(profile_dir, title=None, enabled=True):
     revisions = data.get('_ui_meta_revisions') if isinstance(data.get('_ui_meta_revisions'), dict) else {}
     if enabled:
         block = dict(ui_meta.get(BOT_MODE_KEY) or {}) if isinstance(ui_meta.get(BOT_MODE_KEY), dict) else {}
-        if title is not None:
-            block['title'] = ' '.join(str(title).split())[:160]
+        title = ' '.join(str(title).split())[:160] if title is not None else ''
+        if title:
+            block['title'] = title
         block.setdefault('managed_by', MANAGED_BY)
         ui_meta[BOT_MODE_KEY] = block
     else:
@@ -103,7 +110,9 @@ def bootstrap_profile(profile, plugin_source):
     dest = profiles.get_profile_dir(profile) / 'plugins' / 'bobbot-team'
     dest.parent.mkdir(parents=True, exist_ok=True)
     source = Path(plugin_source).resolve()
-    if not dest.exists():
+    if dest.is_symlink() and not dest.exists():
+        dest.unlink()  # the extension moved since this bot was set up; re-point the link
+    if not dest.exists() and not dest.is_symlink():
         dest.symlink_to(source, target_is_directory=True)
     elif dest.resolve() != source:
         raise RuntimeError('A different team extension is already installed for this profile')
@@ -119,7 +128,7 @@ def enable_teammate_messaging(profile, title=None):
     if not profiles.profile_exists(profile):
         raise ValueError('Profile does not exist')
     profile_dir = profiles.get_profile_dir(profile)
-    if title is None:
+    if not (title or '').strip():
         meta = profiles.read_profile_meta(profile_dir) if hasattr(profiles, 'read_profile_meta') else {}
         title = (meta.get('description') or '').strip().split('.')[0][:80] or profile
     return set_bot_mode(profile_dir, title=title, enabled=True)
@@ -143,8 +152,16 @@ def create_bot(name, role='', persona='', model='', provider='', clone_from='def
     profiles = _profiles()
     if profiles.profile_exists(name):
         raise FileExistsError(f"A bot named '{name}' already exists.")
+    if bool(model) != bool(provider):
+        raise ValueError('Set both model and provider, or neither (the bot then inherits your model).')
     profile_dir = profiles.create_profile(name, clone_from=clone_from or None, clone_config=bool(clone_from), description=(role or '').strip() or None)
     (profile_dir / 'SOUL.md').write_text(persona_text(name, role, persona), encoding='utf-8')
+    # The clone copies settings and keys so the bot can work; the authority's private memories are not the new bot's to keep.
+    for private in ('memories/MEMORY.md', 'memories/USER.md'):
+        try:
+            (profile_dir / private).unlink()
+        except FileNotFoundError:
+            pass
     warnings = []
     if model and provider:
         try:
@@ -170,6 +187,8 @@ def configure_bot(name, description=None, persona=None, role=None, model=None, p
     if not profiles.profile_exists(name):
         raise ValueError(f"No bot named '{name}'.")
     profile_dir = profiles.get_profile_dir(name)
+    if bool(model) != bool(provider):
+        raise ValueError('Set both model and provider to change the model.')
     applied = {}
     if description is not None:
         profiles.write_profile_meta(profile_dir, description=str(description), description_auto=False)

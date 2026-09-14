@@ -94,7 +94,7 @@ fun TeamScreen(onBack: () -> Unit, onChat: (String) -> Unit) {
     val error by vm.error.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     var showHistory by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(Unit) { while (true) { vm.refresh(); delay(5_000) } }
+    com.bobbot.ui.components.PollWhileStarted(Unit, 5_000) { vm.refresh() }
 
     Scaffold(
         containerColor = BobColors.Bg,

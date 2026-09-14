@@ -161,13 +161,16 @@ fun MarkdownBody(text: String, color: Color = BobColors.Text, hug: Boolean = fal
 @Composable
 fun hugWidth(text: String): Dp {
     val cap = BubbleMaxWidth
-    if (hasBlockMarkup(text)) return cap
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
     val style = MaterialTheme.typography.bodyLarge
     val density = androidx.compose.ui.platform.LocalDensity.current
+    // No conditional composable calls: the early decision lives inside the one remember.
     return remember(text, style, density) {
-        val widest = text.lines().maxOfOrNull { line ->
-            if (line.isBlank()) 0 else measurer.measure(androidx.compose.ui.text.AnnotatedString(line), style = style, maxLines = 1, softWrap = false).size.width
+        if (hasBlockMarkup(text)) return@remember cap
+        // Only the few longest lines by character count can be the widest; measuring every line of a long reply is wasted work.
+        val candidates = text.lines().filter { it.isNotBlank() }.sortedByDescending { it.length }.take(6)
+        val widest = candidates.maxOfOrNull { line ->
+            measurer.measure(androidx.compose.ui.text.AnnotatedString(line), style = style, maxLines = 1, softWrap = false).size.width
         } ?: 0
         val needed = with(density) { widest.toDp() } + BubblePaddingH * 2
         if (needed >= cap) cap else needed
@@ -178,10 +181,10 @@ private val BubblePaddingH = 14.dp
 
 /** Tables, fenced code, images, lists, headings and quotes render as blocks and want the full width. */
 fun hasBlockMarkup(text: String): Boolean {
-    if (text.contains("```") || text.contains("![") || text.contains('|')) return true
+    if (text.contains("```") || text.contains("![")) return true
     return text.lines().any { raw ->
-        val l = raw.trimStart()
-        l.startsWith("#") || l.startsWith("- ") || l.startsWith("* ") || l.startsWith("+ ") || l.startsWith("> ") || l.matches(Regex("""^\d+[.)]\s.*"""))
+        val l = raw.trim()
+        (l.startsWith("|") && l.endsWith("|")) || l.startsWith("#") || l.startsWith("- ") || l.startsWith("* ") || l.startsWith("+ ") || l.startsWith("> ") || l.matches(Regex("""^\d+[.)]\s.*"""))
     }
 }
 
@@ -297,7 +300,7 @@ private fun ActivityLine(t: ChatItem.Tool) {
                 listOf(t.name, t.context.takeIf { it.isNotBlank() }).filterNotNull().joinToString(" · "),
                 style = MaterialTheme.typography.labelMedium, color = BobColors.TextFaint, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
             )
-            t.durationS?.let { Spacer(Modifier.width(6.dp)); Text("${"%.1f".format(it)}s", style = MaterialTheme.typography.labelSmall, color = BobColors.TextFaint.copy(alpha = 0.7f)) }
+            t.durationS?.let { Spacer(Modifier.width(6.dp)); Text(String.format(java.util.Locale.US, "%.1fs", it), style = MaterialTheme.typography.labelSmall, color = BobColors.TextFaint.copy(alpha = 0.7f)) }
         }
         AnimatedVisibility(open) {
             Column(Modifier.padding(top = 6.dp)) {

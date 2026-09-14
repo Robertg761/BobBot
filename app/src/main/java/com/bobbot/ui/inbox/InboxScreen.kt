@@ -90,6 +90,8 @@ data class InboxActions(
 fun InboxScreen(actions: InboxActions, vm: InboxViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.load() }
+    // sessions.changed covers chats; worker heartbeats and desktop-side edits need an occasional ask, only while visible.
+    com.bobbot.ui.components.PollWhileStarted(Unit, 60_000, immediate = false) { vm.load(quiet = true) }
     var showNew by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
 
@@ -133,7 +135,7 @@ fun InboxScreen(actions: InboxActions, vm: InboxViewModel = hiltViewModel()) {
 
             if (ui.searching) {
                 val focus = remember { FocusRequester() }
-                LaunchedEffect(Unit) { focus.requestFocus() }
+                LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
                 OutlinedTextField(
                     value = ui.query, onValueChange = vm::setQuery, singleLine = true,
                     placeholder = { Text("Search bots and chats") }, colors = fieldColors(), shape = RoundedCornerShape(14.dp),
@@ -192,7 +194,7 @@ fun InboxScreen(actions: InboxActions, vm: InboxViewModel = hiltViewModel()) {
                     Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Info, null, tint = BobColors.TextFaint, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Groups need Hermes 0.21.2 with the group worker running.", style = MaterialTheme.typography.bodySmall, color = BobColors.TextFaint)
+                        Text("Your Hermes server doesn't have the group worker running.", style = MaterialTheme.typography.bodySmall, color = BobColors.TextFaint)
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -209,8 +211,8 @@ private fun TeammateBanner(busy: Boolean, onEnable: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Your bots can't message each other yet", style = MaterialTheme.typography.titleSmall, color = BobColors.Text)
-            Text("Turn on Hermes teammate messaging so they can hand work around.", style = MaterialTheme.typography.bodySmall, color = BobColors.TextMuted)
+            Text("Some bots can't message each other yet", style = MaterialTheme.typography.titleSmall, color = BobColors.Text)
+            Text("Turn on Hermes teammate messaging for all of them so they can hand work around.", style = MaterialTheme.typography.bodySmall, color = BobColors.TextMuted)
         }
         Spacer(Modifier.width(8.dp))
         androidx.compose.material3.TextButton(onClick = onEnable, enabled = !busy) { Text(if (busy) "Enabling…" else "Enable", color = BobColors.Accent) }

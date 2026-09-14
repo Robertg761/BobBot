@@ -24,8 +24,13 @@ class Store:
             ''')
             # Older stores predate decision scopes. 'exact' = this tool with these arguments, once.
             # 'tool' = this tool, any arguments, for the rest of that conversation or task.
+            # Several processes may open the store at once; whichever adds the column first wins.
             if 'scope' not in [r[1] for r in db.execute('PRAGMA table_info(requests)')]:
-                db.execute("ALTER TABLE requests ADD COLUMN scope TEXT NOT NULL DEFAULT 'exact'")
+                try:
+                    db.execute("ALTER TABLE requests ADD COLUMN scope TEXT NOT NULL DEFAULT 'exact'")
+                except sqlite3.OperationalError as exc:
+                    if 'duplicate column' not in str(exc):
+                        raise
 
     @contextlib.contextmanager
     def connection(self):
@@ -46,7 +51,14 @@ class Store:
             db.execute("INSERT OR REPLACE INTO settings VALUES ('team', ?)",
                        (json.dumps({"authority": authority, "enabled": enabled}),))
 
+    # A pending request waits this long for a decision; a denial stays on record for a week so the
+    # same action is not quietly re-asked an hour later.
+    PENDING_SECONDS = 3600
+    DENIED_SECONDS = 7 * 24 * 3600
+
     def gate(self, profile, session, tool, args, task='', board='default'):
+        """Returns (row, expired): ``row`` is None when the action may run, else the request blocking it;
+        ``expired`` lists undecided requests that timed out and whose review cards should be closed."""
         encoded = json.dumps(args, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
         fingerprint = hashlib.sha256(json.dumps([profile, session, tool, encoded, task, board]).encode()).hexdigest()
         now = time.time()
@@ -56,23 +68,28 @@ class Store:
             grant = db.execute(
                 "SELECT id FROM requests WHERE profile=? AND session=? AND task=? AND tool=? AND scope='tool' AND status='approved' AND expires>? LIMIT 1",
                 (profile, session, task, tool, now)).fetchone()
+            row = db.execute('SELECT * FROM requests WHERE fingerprint=? ORDER BY created DESC LIMIT 1', (fingerprint,)).fetchone()
             if grant:
                 db.commit()
-                return None
-            row = db.execute('SELECT * FROM requests WHERE fingerprint=? ORDER BY created DESC LIMIT 1', (fingerprint,)).fetchone()
+                return None, []
             if row and row['status'] == 'approved' and row['expires'] > now:
                 db.execute("UPDATE requests SET status='consumed' WHERE id=?", (row['id'],))
                 db.commit()
-                return None
+                return None, []
             if row and row['status'] in ('pending', 'needs_user', 'denied') and row['expires'] > now:
                 db.commit()
-                return dict(row)
+                return dict(row), []
+            expired = []
+            if row and row['status'] in ('pending', 'needs_user'):
+                # Nobody decided in time. Close it out so the reviewer's card can go and a fresh request replaces it.
+                db.execute("UPDATE requests SET status='expired' WHERE id=?", (row['id'],))
+                expired.append(dict(row))
             ident = str(uuid.uuid4())
             db.execute('INSERT INTO requests(id,fingerprint,profile,session,tool,args,task,board,status,created,expires) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-                       (ident, fingerprint, profile, session, tool, encoded, task, board, 'pending', now, now + 3600))
+                       (ident, fingerprint, profile, session, tool, encoded, task, board, 'pending', now, now + self.PENDING_SECONDS))
             row = dict(db.execute('SELECT * FROM requests WHERE id=?', (ident,)).fetchone())
             db.commit()
-            return row
+            return row, expired
 
     def get(self, ident):
         with self.connection() as db:
@@ -108,7 +125,12 @@ class Store:
             if not row or row['status'] not in allowed or row['expires'] <= time.time():
                 db.rollback()
                 raise ValueError('Request is no longer awaiting this reviewer')
-            expires = time.time() + self.TOOL_GRANT_SECONDS if scope == 'tool' else row['expires']
+            if scope == 'tool':
+                expires = time.time() + self.TOOL_GRANT_SECONDS
+            elif choice == 'denied':
+                expires = time.time() + self.DENIED_SECONDS
+            else:
+                expires = row['expires']
             db.execute('UPDATE requests SET status=?,reason=?,reviewer=?,scope=?,expires=? WHERE id=?',
                        (choice, reason.strip(), 'you' if human else reviewer, scope, expires, ident))
             db.commit()

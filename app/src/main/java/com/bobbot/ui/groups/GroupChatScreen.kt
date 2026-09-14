@@ -100,12 +100,6 @@ class GroupChatViewModel @Inject constructor(private val groups: GroupsRepositor
         cursor = 0
         ui.value = GroupChatUi()
         viewModelScope.launch { runCatching { prefs.markSeen(InboxKeys.room(id)) } }
-        viewModelScope.launch {
-            while (true) {
-                refresh()
-                delay(if (ui.value.working) 2000 else 4000)
-            }
-        }
     }
 
     fun setInput(v: String) = ui.update { it.copy(input = v) }
@@ -163,13 +157,16 @@ fun GroupChatScreen(roomId: String, onBack: () -> Unit, onOpenBot: (String) -> U
     val vm: GroupChatViewModel = hiltViewModel()
     val ui by vm.ui.collectAsStateWithLifecycle()
     LaunchedEffect(roomId) { vm.bind(roomId) }
+    // Poll only while this screen is visible; the room keeps going on the server regardless.
+    com.bobbot.ui.components.PollWhileStarted(roomId, 3_000) { vm.refresh() }
     val listState = rememberLazyListState()
     val messages = ui.events.filter { it.isMessage && it.text.isNotBlank() }
     val extra = (if (ui.working) 1 else 0) + ui.actions.size + 1
     val follow = com.bobbot.ui.chat.rememberFollowBottom(listState)
     LaunchedEffect(messages.size, ui.working, ui.actions.size) {
         if (messages.lastOrNull()?.fromUser == true) follow.value = true
-        if (follow.value && messages.isNotEmpty()) listState.animateScrollToItem(messages.size + extra)
+        val last = listState.layoutInfo.totalItemsCount - 1
+        if (follow.value && messages.isNotEmpty() && last >= 0) listState.animateScrollToItem(last)
     }
     val members = ui.room?.members ?: emptyList()
     val title = ui.room?.name?.ifBlank { null } ?: members.joinToString(", ") { BotNames.display(it) }.ifBlank { "Group" }
@@ -241,8 +238,8 @@ fun GroupChatScreen(roomId: String, onBack: () -> Unit, onOpenBot: (String) -> U
                         Spacer(Modifier.height(12.dp))
                         Row { Spacer(Modifier.width(36.dp)); TypingBubble(color = BobColors.TextMuted) }
                     }
-                    ui.actions.forEach { action ->
-                        item(key = "action:" + (action.str("request_id") ?: action.str("task_id") ?: action.hashCode())) {
+                    ui.actions.forEachIndexed { index, action ->
+                        item(key = "action:$index:" + (action.str("request_id") ?: action.str("task_id") ?: "")) {
                             Spacer(Modifier.height(12.dp))
                             ActionCard(action, busy = ui.busy, onRespond = { choice -> vm.respond(action, choice) })
                         }
@@ -260,7 +257,7 @@ private fun MentionChips(input: String, members: List<String>, onPick: (String) 
     val token = input.substringAfterLast(' ').substringAfterLast('\n')
     if (!token.startsWith("@") || members.isEmpty()) return
     val typed = token.drop(1).lowercase()
-    val handles = members.map { p -> (if (p == "default") "hermes" else p) to p }.filter { (h, p) -> h.startsWith(typed) || botName(p).lowercase().startsWith(typed) }
+    val handles = members.map { p -> (if (p == "default") "hermes" else p) to p }.distinctBy { it.first }.filter { (h, p) -> h.startsWith(typed) || botName(p).lowercase().startsWith(typed) }
     if (handles.isEmpty()) return
     androidx.compose.foundation.lazy.LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
         items(handles.size, key = { handles[it].first }) { i ->

@@ -85,6 +85,7 @@ fun PermissionCard(
                         request.status == "approved" && request.scope == "tool" -> "Allowed for that conversation"
                         request.status == "approved" -> "Allowed once"
                         request.status == "denied" -> "Denied"
+                        request.status == "expired" -> "No decision in time"
                         else -> request.status.replace('_', ' ')
                     } + " · " + relativeTime(request.createdMillis / 1000.0),
                     style = MaterialTheme.typography.labelSmall, color = accent,

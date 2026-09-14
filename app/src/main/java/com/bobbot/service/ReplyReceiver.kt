@@ -21,6 +21,7 @@ import javax.inject.Inject
 class ReplyReceiver : BroadcastReceiver() {
     @Inject lateinit var chat: ChatRepository
     @Inject lateinit var notifier: Notifier
+    @Inject lateinit var prefs: com.bobbot.data.prefs.AppPrefs
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_REPLY) return
@@ -31,11 +32,15 @@ class ReplyReceiver : BroadcastReceiver() {
         if (text.isEmpty()) return
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
+            runCatching { BotNames.seed(prefs.currentBotNames()); BotNames.setNicknames(prefs.currentNicknames()) }
+            // A broadcast receiver has about ten seconds; past that Android reports the app as not responding.
             val ok = runCatching {
-                val live = chat.resumeSession(sessionId, profile)
-                chat.send(live, text)
+                kotlinx.coroutines.withTimeout(8_000) {
+                    val live = chat.resumeSession(sessionId, profile)
+                    chat.send(live, text)
+                }
             }.onFailure { Log.w(TAG, "reply failed", it) }.isSuccess
-            notifier.replied(id, BotNames.display(profile), ok, text)
+            notifier.replied(id, profile, ok, text)
             pending.finish()
         }
     }

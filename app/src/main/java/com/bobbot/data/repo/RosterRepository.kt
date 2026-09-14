@@ -95,8 +95,10 @@ class RosterRepository @Inject constructor(private val socket: GatewaySocket, pr
      */
     suspend fun setTeammateMessaging(profile: String, enabled: Boolean, role: String? = null) {
         socket.ensureConnected()
-        val block: Any? = if (enabled) jsonOf("title" to (role?.trim()?.take(160)?.ifBlank { null } ?: BotNames.display(profile)), "managed_by" to "bobbot") else null
-        val r = socket.call("profiles.configure", jsonOf("name" to profile, "ui_meta" to jsonOf(BOT_MODE_KEY to block)))
+        // jsonOf drops nulls, and a null here is the point: it tells Hermes to delete the key.
+        val block: kotlinx.serialization.json.JsonElement = if (enabled) jsonOf("title" to (role?.trim()?.take(160)?.ifBlank { null } ?: BotNames.display(profile)), "managed_by" to "bobbot") else kotlinx.serialization.json.JsonNull
+        val meta = kotlinx.serialization.json.JsonObject(mapOf(BOT_MODE_KEY to block))
+        val r = socket.call("profiles.configure", jsonOf("name" to profile, "ui_meta" to meta))
         check(r.child("applied").bool("ui_meta") != false) { "Hermes did not accept the change" }
     }
 

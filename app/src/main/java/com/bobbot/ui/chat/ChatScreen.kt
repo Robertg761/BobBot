@@ -107,8 +107,9 @@ fun ChatScreen(
     val ui by vm.ui.collectAsStateWithLifecycle()
     LaunchedEffect(sessionId, profile) { vm.open(sessionId, profile, mainConversation) }
     DisposableEffect(Unit) { onDispose { vm.leave() } }
+    com.bobbot.ui.components.PollWhileStarted(Unit, 15_000, immediate = false) { vm.loadPermissions() }
     val snack = remember { SnackbarHostState() }
-    LaunchedEffect(ui.toast) { ui.toast?.let { snack.showSnackbar(it); vm.clearToast() } }
+    LaunchedEffect(ui.toastSeq) { ui.toast?.let { snack.showSnackbar(it); vm.clearToast() } }
     val listState = rememberLazyListState()
     val session = ui.session
     val items = session?.items ?: emptyList()
@@ -129,12 +130,13 @@ fun ChatScreen(
     // Follow the conversation like a messages app: animate once when something new arrives, snap
     // without animation while a reply streams, and stop following as soon as the user scrolls up.
     val follow = rememberFollowBottom(listState)
+    // Markdown lays out a beat after the item appears, so aim past the end; the list clamps to the real bottom.
     LaunchedEffect(items.size, showTyping, prompt) {
         if (items.lastOrNull() is ChatItem.User) follow.value = true
-        if (follow.value && lastIndex >= 0) listState.animateScrollToItem(lastIndex)
+        if (follow.value && lastIndex >= 0) listState.animateScrollToItem(lastIndex, scrollOffset = Int.MAX_VALUE / 2)
     }
     LaunchedEffect(lastAssistant?.text?.length) {
-        if (follow.value && lastAssistant?.streaming == true && lastIndex >= 0) listState.scrollToItem(lastIndex)
+        if (follow.value && lastAssistant?.streaming == true && lastIndex >= 0) listState.scrollToItem(lastIndex, scrollOffset = Int.MAX_VALUE / 2)
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(vm::attach) }
@@ -191,7 +193,7 @@ fun ChatScreen(
                 input = ui.input, onInput = vm::setInput, onSend = vm::send, onStop = vm::interrupt,
                 busy = session?.isBusy == true, attachments = session?.attachments ?: emptyList(),
                 attaching = ui.attaching, onAttach = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                enabled = ui.liveId != null && ui.socket == SocketState.CONNECTED,
+                enabled = ui.liveId != null, canSend = ui.socket == SocketState.CONNECTED,
                 notice = session?.notice, placeholder = "Message $botLabel",
             )
         },
@@ -236,9 +238,11 @@ fun ChatScreen(
                         val below = items.getOrNull(i + 1)
                         val groupedAbove = sameSender(above, item)
                         val groupedBelow = sameSender(item, below)
+                        // Tool and system lines carry no time; the last timed entry decides whether a new day started.
+                        val previousTimed = if (i == 0) null else items.subList(0, i).lastOrNull { it.at != null }
                         item(key = item.id) {
                             val at = item.at
-                            if (at != null && startsNewDay(above, item)) DaySeparator(dayLabel(at))
+                            if (at != null && startsNewDay(previousTimed, item)) DaySeparator(dayLabel(at))
                             else Spacer(Modifier.height(if (i == 0) 0.dp else gapBetween(groupedAbove)))
                             MessageItem(item, profile, groupedAbove, groupedBelow)
                             val settled = item is ChatItem.User || item is ChatItem.Teammate || (item is ChatItem.Assistant && !item.streaming && item.text.isNotBlank())
@@ -291,7 +295,7 @@ fun ChatScreen(
         }
     }
     if (renaming) {
-        var t by remember { mutableStateOf(session?.title ?: "") }
+        var t by remember(session?.title) { mutableStateOf(session?.title ?: "") }
         AlertDialog(
             onDismissRequest = { renaming = false },
             containerColor = BobColors.SurfaceRaised,
@@ -443,6 +447,8 @@ internal fun Composer(
     input: String, onInput: (String) -> Unit, onSend: () -> Unit, onStop: () -> Unit,
     busy: Boolean, attachments: List<String>, attaching: Boolean, onAttach: (() -> Unit)?, enabled: Boolean,
     notice: String?, placeholder: String,
+    /** Typing stays possible during a socket blip; only sending waits for the connection. */
+    canSend: Boolean = true,
 ) {
     Column(Modifier.fillMaxWidth().background(BobColors.Bg).imePadding().navigationBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp)) {
         if (!notice.isNullOrBlank()) {
@@ -468,7 +474,7 @@ internal fun Composer(
             ) {
                 OutlinedTextField(
                     value = input, onValueChange = onInput, enabled = enabled,
-                    placeholder = { Text(if (enabled) placeholder else "Connecting…", color = BobColors.TextFaint) },
+                    placeholder = { Text(if (enabled) placeholder else "Opening…", color = BobColors.TextFaint) },
                     // Sentence capitalisation and a plain text keyboard: without this the keyboard gets no hint and stays lowercase.
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
@@ -487,9 +493,9 @@ internal fun Composer(
                 if (busy) {
                     FilledIconButton(onClick = onStop, colors = IconButtonDefaults.filledIconButtonColors(containerColor = BobColors.RoseSoft, contentColor = BobColors.Rose), modifier = Modifier.padding(bottom = 6.dp).size(44.dp)) { Icon(Icons.Outlined.Stop, "Stop") }
                 } else {
-                    val canSend = enabled && (input.isNotBlank() || attachments.isNotEmpty())
+                    val sendable = enabled && canSend && (input.isNotBlank() || attachments.isNotEmpty())
                     FilledIconButton(
-                        onClick = onSend, enabled = canSend,
+                        onClick = onSend, enabled = sendable,
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = BobColors.UserBubble, contentColor = BobColors.UserBubbleText, disabledContainerColor = BobColors.SurfaceHigh, disabledContentColor = BobColors.TextFaint),
                         modifier = Modifier.padding(bottom = 6.dp).size(44.dp),
                     ) { Icon(Icons.Rounded.ArrowUpward, "Send") }

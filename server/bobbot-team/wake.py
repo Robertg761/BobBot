@@ -117,9 +117,44 @@ def nudge_specialist(row, authority):
     except Exception as exc:
         log.info('bobbot-team: live admission skipped for %s: %s', row['profile'], exc)
     command = dm._delivery_command(argv, dm_file, stdin_file=False, profile_home=home, author=author)
-    env = dict(os.environ)
-    env.pop('HERMES_KANBAN_TASK', None)
-    env.pop('HERMES_KANBAN_BOARD', None)
-    subprocess.Popen(shlex.split(command), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     start_new_session=True, env=env)
+    env = nudge_env(os.environ)
+    log_path = Path(home) / 'logs' / 'bobbot-team-nudge.log'
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        stderr = open(log_path, 'ab')
+    except OSError:
+        stderr = subprocess.DEVNULL
+    proc = subprocess.Popen(shlex.split(command), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=stderr,
+                            start_new_session=True, env=env, cwd=hermes_root())
+    log.info('bobbot-team: nudging %s for permission %s (pid %s)', row['profile'], row['id'], proc.pid)
     return True
+
+
+# Everything that ties a process to the deciding context rather than the specialist's own turn:
+# the authority's kanban worker identity, its chat session, and cron delivery targets.
+_CONTEXT_PREFIXES = ('HERMES_KANBAN_', 'HERMES_SESSION_', 'HERMES_CRON_', 'HERMES_UI_SESSION', 'HERMES_BROWSER_CONTROL_')
+_CONTEXT_KEYS = frozenset({'HERMES_PROFILE', 'HERMES_TURN_AUTHOR', 'TERMINAL_CWD', 'HERMES_TUI'})
+
+
+def nudge_env(base):
+    """The delivery child's environment: secrets scrubbed the way Hermes scrubs terminal children,
+    and nothing left over from whoever made the decision (a kanban worker or the dashboard)."""
+    env = dict(base)
+    try:
+        from tools.environments.local import build_subprocess_env
+        env = build_subprocess_env(env)
+    except Exception as exc:
+        log.info('bobbot-team: secret scrub unavailable (%s); stripping context only', exc)
+    for key in list(env):
+        if key in _CONTEXT_KEYS or key.startswith(_CONTEXT_PREFIXES):
+            env.pop(key, None)
+    return env
+
+
+def hermes_root():
+    """The hermes-agent checkout, the cwd Hermes' own delivery runner uses; None keeps the caller's."""
+    try:
+        import tools.bot_mode_dm as dm
+        return str(Path(dm.__file__).resolve().parents[1])
+    except Exception:
+        return None

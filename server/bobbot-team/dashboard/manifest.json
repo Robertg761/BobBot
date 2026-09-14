@@ -1,1 +1,1 @@
-{"name":"bobbot-team","label":"BobBot team","description":"Team permissions and authority settings","icon":"Users","version":"0.1.0","tab":{"path":"/bobbot-team","position":"after:skills"},"slots":[],"entry":"dist/index.js","api":"plugin_api.py"}
+{"name":"bobbot-team","label":"BobBot team","description":"Team permissions and authority settings","icon":"Users","version":"0.3.2","tab":{"path":"/bobbot-team","position":"after:skills"},"slots":[],"entry":"dist/index.js","api":"plugin_api.py"}

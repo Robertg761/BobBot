@@ -121,7 +121,7 @@ class TeamRepository @Inject constructor(private val api: HermesApi) {
             enabled = r.bool("enabled") ?: true,
             profiles = r.list("profiles").mapNotNull { it.str("name") },
             teammateMessaging = r.bool("teammate_messaging") ?: false,
-            requests = r.list("requests").map(TeamRequest::from),
+            requests = r.list("requests").map(TeamRequest::from).filter { it.id.isNotBlank() }.distinctBy { it.id },
         )
         _state.value = s
         return s

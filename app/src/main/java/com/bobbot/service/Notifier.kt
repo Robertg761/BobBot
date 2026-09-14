@@ -62,22 +62,45 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             .setDescription("A bot finishing or stalling on work another bot gave it")
             .build()
         manager.createNotificationChannelsCompat(listOf(bots, link, relay))
-        runCatching { manager.deleteNotificationChannel("link") }
+        // One-time migration from the old, louder "link" channel.
+        val flags = ctx.getSharedPreferences("notifier", Context.MODE_PRIVATE)
+        if (!flags.getBoolean("link_channel_migrated", false)) {
+            runCatching { manager.deleteNotificationChannel("link") }
+            flags.edit().putBoolean("link_channel_migrated", true).apply()
+        }
     }
+
+    /** Recent messages per conversation so a bot's notification reads as one thread, not a pile. */
+    private val threads = HashMap<String, ArrayDeque<NotificationCompat.MessagingStyle.Message>>()
+
+    private fun threadId(profile: String?, sessionId: String?): Int =
+        ("thread:" + (profile ?: "") + ":" + (sessionId ?: "")).hashCode() and 0x7fffffff
 
     // ---- public API ----
 
-    /** A message from a bot. Tapping it deep-links into the session it came from. */
+    /**
+     * A message from a bot, shown as a conversation: one notification per chat that grows as the bot
+     * keeps talking. Tapping it opens that chat; a task chat's title is shown under the bot's name.
+     */
     fun botMessage(bot: String, title: String, text: String, sessionId: String?, profile: String?) {
         val body = text.ifBlank { "(no content)" }
-        val id = seq.incrementAndGet()
+        val id = threadId(profile ?: bot, sessionId)
+        val sender = androidx.core.app.Person.Builder().setName(bot.ifBlank { "Bot" }).setKey(profile ?: bot).build()
+        val style = NotificationCompat.MessagingStyle(androidx.core.app.Person.Builder().setName("You").build())
+        val messages = synchronized(threads) {
+            threads.getOrPut(id.toString()) { ArrayDeque() }.also { q ->
+                q.addLast(NotificationCompat.MessagingStyle.Message(body, System.currentTimeMillis(), sender))
+                while (q.size > 6) q.removeFirst()
+            }.toList()
+        }
+        messages.forEach { style.addMessage(it) }
+        if (title.isNotBlank() && title != bot) style.setConversationTitle(title)
         val n = base(CH_BOTS)
-            .setContentTitle(title.ifBlank { bot })
-            .setContentText(body.lineSequence().firstOrNull()?.take(120) ?: body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body).setSummaryText(bot))
+            .setStyle(style)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
+            .setOnlyAlertOnce(false)
             .setContentIntent(openApp(sessionId, profile))
             .apply { if (sessionId != null && profile != null) addAction(replyAction(id, sessionId, profile)) }
             .build()
@@ -85,7 +108,9 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
     }
 
     /** One bot talking to another on the board. */
-    fun botToBot(from: String, to: String, text: String) {
+    fun botToBot(fromProfile: String, toProfile: String, text: String) {
+        val from = com.bobbot.data.repo.BotNames.display(fromProfile)
+        val to = com.bobbot.data.repo.BotNames.display(toProfile)
         val body = text.ifBlank { "(no content)" }
         val n = base(CH_RELAY)
             .setContentTitle("$from → $to")
@@ -94,7 +119,7 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setAutoCancel(true)
-            .setContentIntent(openApp(null, to))
+            .setContentIntent(openApp(null, toProfile))
             .build()
         post(seq.incrementAndGet(), n)
     }
@@ -119,11 +144,11 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
     /** The result of a scheduled automation run. */
     fun automation(name: String, bot: String, output: String, ok: Boolean) {
         val body = output.ifBlank { if (ok) "finished" else "failed" }
+        val who = com.bobbot.data.repo.BotNames.display(bot)
         val n = base(CH_BOTS)
-            .setContentTitle(if (ok) name else "$name failed")
+            .setContentTitle(if (ok) "$who · $name" else "$who · $name failed")
             .setContentText(body.lineSequence().firstOrNull()?.take(120) ?: body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body).setSummaryText(bot))
-            .setSubText(bot)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(if (ok) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
@@ -149,10 +174,6 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
 
     /** Re-post the ongoing notification so the service can reflect state changes. */
     fun updateLink(status: String) = post(ID_LINK, linkOngoing(status))
-
-    fun cancelLink() {
-        runCatching { manager.cancel(ID_LINK) }
-    }
 
     // ---- internals ----
 
@@ -191,7 +212,9 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
     }
 
     /** Swap a message notification for a short confirmation after a reply went out. */
-    fun replied(notificationId: Int, bot: String, ok: Boolean, text: String) {
+    fun replied(notificationId: Int, profile: String, ok: Boolean, text: String) {
+        val bot = com.bobbot.data.repo.BotNames.display(profile)
+        synchronized(threads) { threads.remove(notificationId.toString()) }
         val n = base(CH_BOTS)
             .setContentTitle(if (ok) "Sent to $bot" else "Reply to $bot failed")
             .setContentText(text.take(120))
@@ -199,7 +222,7 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             .setSilent(true)
             .setAutoCancel(true)
             .setTimeoutAfter(if (ok) 4_000 else 30_000)
-            .setContentIntent(openApp(null, bot))
+            .setContentIntent(openApp(null, profile))
             .build()
         post(notificationId, n)
     }

@@ -36,6 +36,8 @@ data class ChatUi(
     val showModelPicker: Boolean = false,
     val showReasoningPicker: Boolean = false,
     val toast: String? = null,
+    /** Bumped with every toast so two identical messages in a row both show. */
+    val toastSeq: Int = 0,
     val socket: SocketState = SocketState.DISCONNECTED,
     val attaching: Boolean = false,
     /** True for the bot's ongoing conversation, the one its inbox row stands for. */
@@ -61,7 +63,6 @@ class ChatViewModel @Inject constructor(
     private val team: com.bobbot.data.repo.TeamRepository,
 ) : ViewModel() {
     private val _ui = MutableStateFlow(ChatUi())
-    private var permissionTicker: Job? = null
     val ui: StateFlow<ChatUi> = _ui
     private var stateJob: Job? = null
     private var profile: String = "default"
@@ -96,10 +97,7 @@ class ChatViewModel @Inject constructor(
                 _ui.update { it.copy(isMain = isMain) }
                 markRead()
                 loadTasks()
-                permissionTicker?.cancel()
-                permissionTicker = viewModelScope.launch {
-                    while (true) { loadPermissions(); kotlinx.coroutines.delay(15_000) }
-                }
+                loadPermissions()
                 stateJob?.cancel()
                 stateJob = viewModelScope.launch {
                     chat.state(live)?.collect { s ->
@@ -144,8 +142,8 @@ class ChatViewModel @Inject constructor(
         val p = profile
         viewModelScope.launch {
             val tasks = runCatching { board.refresh() }.getOrNull() ?: return@launch
-            val mine = tasks.filter { (it.assignee == p || it.createdBy == p) && it.status.lowercase() !in doneStatuses }
-                .sortedByDescending { it.updatedAt ?: it.createdAt ?: "" }.take(8)
+            val mine = tasks.filter { it.id.isNotBlank() && (it.assignee == p || it.createdBy == p) && it.status.lowercase() !in doneStatuses }
+                .distinctBy { it.id }.sortedByDescending { it.updatedAt ?: it.createdAt ?: "" }.take(8)
             _ui.update { it.copy(tasks = mine) }
         }
     }
@@ -194,17 +192,35 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             _ui.update { it.copy(attaching = true) }
             try {
-                val (b64, name) = withContext(Dispatchers.IO) {
-                    val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw IllegalStateException("Could not read image")
-                    if (bytes.size > 24 * 1024 * 1024) throw IllegalStateException("Image is larger than 24 MB")
-                    val type = ctx.contentResolver.getType(uri) ?: "image/png"
-                    val ext = when { type.contains("jpeg") || type.contains("jpg") -> "jpg"; type.contains("webp") -> "webp"; type.contains("gif") -> "gif"; else -> "png" }
-                    Base64.encodeToString(bytes, Base64.NO_WRAP) to "photo_${System.currentTimeMillis()}.$ext"
+                // Decode, downscale and encode entirely off the main thread; a raw phone photo is tens of MB as base64.
+                withContext(Dispatchers.IO) {
+                    val (b64, name) = encodeForUpload(uri)
+                    chat.attachImage(live, b64, name)
                 }
-                chat.attachImage(live, b64, name)
             } catch (e: Exception) { toast(e.message ?: "Attach failed") }
             _ui.update { it.copy(attaching = false) }
         }
+    }
+
+    /** Downscale to at most 2048 px and JPEG-compress, so the frame Hermes receives stays a few hundred KB. */
+    private fun encodeForUpload(uri: Uri): Pair<String, String> {
+        val resolver = ctx.contentResolver
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) } ?: throw IllegalStateException("Could not read image")
+        val largest = maxOf(bounds.outWidth, bounds.outHeight).coerceAtLeast(1)
+        var sample = 1
+        while (largest / sample > 2048) sample *= 2
+        val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+        val bitmap = resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) } ?: throw IllegalStateException("Could not decode image")
+        val out = java.io.ByteArrayOutputStream()
+        try {
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+        } finally {
+            bitmap.recycle()
+        }
+        val bytes = out.toByteArray()
+        if (bytes.size > 6 * 1024 * 1024) throw IllegalStateException("Image is too large even after compression")
+        return Base64.encodeToString(bytes, Base64.NO_WRAP) to "photo_${System.currentTimeMillis()}.jpg"
     }
 
     fun openModelPicker() {
@@ -240,6 +256,6 @@ class ChatViewModel @Inject constructor(
 
     fun rename(title: String) { val live = _ui.value.liveId ?: return; viewModelScope.launch { runCatching { chat.setTitle(live, title) } } }
 
-    fun toast(msg: String) { _ui.update { it.copy(toast = msg) } }
+    fun toast(msg: String) { _ui.update { it.copy(toast = msg, toastSeq = it.toastSeq + 1) } }
     fun clearToast() = _ui.update { it.copy(toast = null) }
 }

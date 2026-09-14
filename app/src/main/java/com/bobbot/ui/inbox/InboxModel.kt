@@ -41,8 +41,8 @@ fun epochMillis(raw: Double): Long = when {
     else -> (raw * 1000.0).toLong()
 }
 
-/** Group rooms have no server read state; "opened after the last change" is the best local answer. */
-fun isUnread(lastActive: Long, seenAt: Long?): Boolean = seenAt != null && lastActive > seenAt
+/** Group rooms have no server read state; a room you have never opened, or one changed since you did, is unread. */
+fun isUnread(lastActive: Long, seenAt: Long?): Boolean = lastActive > 0 && (seenAt == null || lastActive > seenAt)
 
 /**
  * @param chats each bot's canonical conversation as Hermes reports it (preview, activity, unread, pin)

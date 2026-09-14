@@ -6,6 +6,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * Friendly names for bots. Hermes profile ids are fixed (the default profile cannot be renamed at
@@ -21,11 +22,17 @@ object BotNames {
     val names: StateFlow<Map<String, String>> = _names
 
     fun setPersona(profile: String, heading: String?) {
-        personas.value = personas.value + (profile to (heading?.trim().orEmpty()))
+        personas.update { it + (profile to (heading?.trim().orEmpty())) }
         recompute()
     }
 
     fun setNicknames(map: Map<String, String>) { nicknames.value = map; recompute() }
+
+    /** Seed from a persisted snapshot so notifications name bots correctly before any network call. */
+    fun seed(map: Map<String, String>) { personas.update { map + it }; recompute() }
+
+    /** Persona headings only (nicknames live in their own preference). */
+    fun personaSnapshot(): Map<String, String> = personas.value.filterValues { it.isNotBlank() }
 
     fun display(profile: String): String = _names.value[profile]?.takeIf { it.isNotBlank() } ?: fallback(profile)
 
@@ -36,7 +43,8 @@ object BotNames {
         _names.value = out
     }
 
-    fun fallback(profile: String): String = profile.replaceFirstChar { it.titlecase() }
+    /** "research-bot" reads as "Research Bot"; profile ids are lowercase with dashes and underscores. */
+    fun fallback(profile: String): String = profile.split('-', '_').filter { it.isNotBlank() }.joinToString(" ") { w -> w.replaceFirstChar { it.titlecase() } }.ifBlank { profile }
 
     /** Only a document title can name a bot. Template section labels are not names. */
     fun headingOf(soul: String?): String? = soul?.lineSequence()

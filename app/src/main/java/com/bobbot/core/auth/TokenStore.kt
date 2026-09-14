@@ -11,12 +11,13 @@ import javax.inject.Singleton
  */
 @Singleton
 class TokenStore @Inject constructor(private val prefs: AppPrefs) {
-    @Volatile private var sessionTokenMode: Boolean = false
+    /** Null until read from prefs: the link service or a receiver may run before any activity did. */
+    @Volatile private var sessionTokenMode: Boolean? = null
 
     suspend fun baseUrl(): String = prefs.current().baseUrl
     suspend fun accessToken(): String = prefs.current().accessToken
     suspend fun refreshToken(): String = prefs.current().refreshToken
-    fun isSessionToken(): Boolean = sessionTokenMode
+    suspend fun isSessionToken(): Boolean = sessionTokenMode ?: run { restoreMode(); sessionTokenMode ?: false }
 
     suspend fun save(access: String, refresh: String?, expiresAt: Long) {
         sessionTokenMode = false

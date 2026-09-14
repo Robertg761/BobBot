@@ -69,6 +69,8 @@ class LinkService : Service() {
         private val ACTIVITY_KINDS = setOf("completed", "blocked")
 
 
+        private val BotNamesLoaded = java.util.concurrent.atomic.AtomicBoolean(false)
+
         /** Cheap, good-enough liveness flag for the settings screen. */
         @Volatile
         var isRunning: Boolean = false
@@ -110,7 +112,12 @@ class LinkService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // startForeground must happen before anything else, including on the stop path:
         // the system expects it within a few seconds of startForegroundService().
-        goForeground(status.value)
+        if (!goForeground(status.value)) {
+            // Android refused (started from the background, or the notification could not be shown).
+            // Running un-promoted would only crash the process a few seconds later.
+            shutdown()
+            return START_NOT_STICKY
+        }
 
         if (intent?.action == ACTION_STOP) {
             shutdown()
@@ -120,9 +127,24 @@ class LinkService : Service() {
         if (!watchersStarted) {
             watchersStarted = true
             isRunning = true
-            launchWatchers()
+            scope.launch {
+                // Names bots gave themselves, cached from the last app run; the service may be the first thing up after a reboot.
+                runCatching { com.bobbot.data.repo.BotNames.seed(prefs.currentBotNames()); com.bobbot.data.repo.BotNames.setNicknames(prefs.currentNicknames()) }
+                launchWatchers()
+            }
         }
         return START_STICKY
+    }
+
+    /** Android 14 gives a data-sync service six hours a day; when that runs out, stop cleanly instead of being killed. */
+    override fun onTimeout(startId: Int) {
+        Log.w(TAG, "foreground service timed out; stopping")
+        shutdown()
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "foreground service timed out (type $fgsType); stopping")
+        shutdown()
     }
 
     override fun onDestroy() {
@@ -134,16 +156,21 @@ class LinkService : Service() {
 
     // ---- lifecycle helpers ----
 
-    private fun goForeground(text: String) {
+    private fun goForeground(text: String): Boolean {
         val n = notifier.linkOngoing(text)
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(Notifier.ID_LINK, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(Notifier.ID_LINK, n)
+        return try {
+            when {
+                // A long-lived listener is "special use"; dataSync would be cut off after six hours a day on Android 15+.
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                    startForeground(Notifier.ID_LINK, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+                    startForeground(Notifier.ID_LINK, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                else -> startForeground(Notifier.ID_LINK, n)
             }
+            true
         } catch (e: Exception) {
             Log.w(TAG, "startForeground failed", e)
+            false
         }
     }
 
@@ -151,7 +178,9 @@ class LinkService : Service() {
         isRunning = false
         runCatching { ntfyCall?.cancel() }
         supervisor.cancel()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        // With the app closed nobody needs the socket; leaving it would keep reconnecting from the background forever.
+        if (!ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) runCatching { chat.disconnect() }
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         stopSelf()
     }
 
@@ -217,6 +246,8 @@ class LinkService : Service() {
 
     private suspend fun gatewayKeeper() = resilient("gateway") { _ ->
         chat.connect()
+        // Display names (persona headings) are loaded by the app; the service may be the first thing running after a reboot.
+        if (BotNamesLoaded.compareAndSet(false, true)) runCatching { bots.refresh() }.onFailure { BotNamesLoaded.set(false) }
         status.value = "Connected to Hermes · watching for bot messages"
         delay(30_000)
         0L // healthy: no extra backoff
@@ -230,9 +261,13 @@ class LinkService : Service() {
                 try {
                     if (!enabled()) return@collect
                     if (appInForeground()) return@collect
+                    // The bot's name is the title, like a messages app. A task chat's own title goes second;
+                    // the ongoing conversation's title is Hermes' internal "Bot Chat" and is not shown.
+                    val name = com.bobbot.data.repo.BotNames.display(notice.profile)
+                    val chatTitle = notice.title.takeIf { it.isNotBlank() && it != ChatRepository.MAIN_CHAT_TITLE }
                     notifier.botMessage(
-                        bot = notice.profile,
-                        title = notice.title.ifBlank { notice.profile },
+                        bot = name,
+                        title = if (chatTitle != null) "$name · $chatTitle" else name,
                         text = notice.preview,
                         sessionId = notice.storedId,
                         profile = notice.profile,
@@ -288,11 +323,11 @@ class LinkService : Service() {
             "message" -> {
                 val message = el.str("message")?.takeIf { it.isNotBlank() } ?: return
                 if (message.contains("[SILENT]")) return
-                val bot = el.list("tags").mapNotNull { it.asString() }
-                    .firstOrNull { it.isNotBlank() } ?: "Hermes"
+                val tag = el.list("tags").mapNotNull { it.asString() }.firstOrNull { it.isNotBlank() }
+                val bot = tag?.let { com.bobbot.data.repo.BotNames.display(it) } ?: "Hermes"
                 notifier.botMessage(
                     bot = bot,
-                    title = el.str("title")?.takeIf { it.isNotBlank() } ?: "Hermes",
+                    title = el.str("title")?.takeIf { it.isNotBlank() } ?: bot,
                     text = message,
                     sessionId = null,
                     profile = null,
@@ -338,7 +373,8 @@ class LinkService : Service() {
                 if (targets.none { it == "ntfy" } && !chatIsAttached(target)) {
                     val run = runCatching { automations.runs(job, 1).firstOrNull() }.getOrNull()
                     val output = run?.output?.takeIf { it.isNotBlank() && !it.contains("[SILENT]") } ?: continue
-                    notifier.botMessage(bot = target, title = job.name, text = output, sessionId = null, profile = target)
+                    val name = com.bobbot.data.repo.BotNames.display(target)
+                    notifier.botMessage(bot = name, title = "$name · ${job.name}", text = output, sessionId = null, profile = target)
                 }
                 continue
             }

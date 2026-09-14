@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -64,6 +65,7 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
         val LAST_CRON_SEEN = stringPreferencesKey("last_cron_seen")
         val LAST_BOARD_CURSOR = longPreferencesKey("last_board_cursor")
         val NICKNAMES = stringPreferencesKey("bot_nicknames")
+        val BOT_NAMES = stringPreferencesKey("bot_names")
         val SEEN = stringPreferencesKey("conversations_seen")
         val PKCE_VERIFIER = stringPreferencesKey("pkce_verifier")
         val PKCE_STATE = stringPreferencesKey("pkce_state")
@@ -158,8 +160,19 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
         context.dataStore.edit { it[K.NICKNAMES] = map.entries.joinToString("\n") { (k, v) -> "$k=$v" } }
     }
 
+    /** Last known persona names per profile ("profile=name" lines), a cache for the service and receivers. */
+    suspend fun currentBotNames(): Map<String, String> =
+        (context.dataStore.data.first()[K.BOT_NAMES] ?: "").lineSequence()
+            .filter { it.contains('=') }
+            .associate { it.substringBefore('=') to it.substringAfter('=') }
+            .filterValues { it.isNotBlank() }
+
+    suspend fun setBotNames(map: Map<String, String>) = context.dataStore.edit {
+        it[K.BOT_NAMES] = map.entries.joinToString("\n") { (k, v) -> "$k=${v.replace('\n', ' ')}" }
+    }
+
     /** When each inbox conversation was last open, as "key=epochMillis" lines. */
-    val seen: Flow<Map<String, Long>> = context.dataStore.data.map { parseSeen(it[K.SEEN]) }
+    val seen: Flow<Map<String, Long>> = context.dataStore.data.map { parseSeen(it[K.SEEN]) }.catch { emit(emptyMap()) }
 
     suspend fun markSeen(key: String, at: Long = System.currentTimeMillis()) = context.dataStore.edit {
         val map = parseSeen(it[K.SEEN]).toMutableMap()

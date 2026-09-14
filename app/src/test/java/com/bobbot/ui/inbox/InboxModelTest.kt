@@ -54,9 +54,11 @@ class InboxModelTest {
     @Test fun groupUnreadIsLocalOpenedAfterLastChange() {
         val room = GroupRoom(id = "r1", name = "Ops", members = listOf("a", "b"), updatedAt = 10_000.0, latestSeq = 1, disbanded = false)
         val row = { seenAt: Long? -> inbox(emptyList(), rooms = listOf(room), seen = seenAt?.let { mapOf(InboxKeys.room("r1") to it) } ?: emptyMap()).single() }
-        assertFalse("never opened is not unread", row(null).unread)
+        assertTrue("a room with activity you never opened is unread", row(null).unread)
         assertTrue(row(1_000_000L).unread)
         assertFalse(row(20_000_000L).unread)
+        val quiet = room.copy(updatedAt = 0.0)
+        assertFalse("a room with no activity yet is not unread", inbox(emptyList(), rooms = listOf(quiet)).single().unread)
     }
 
     @Test fun presenceComesFromLiveSessionsOrServerWorkers() {

@@ -26,6 +26,7 @@ class BotsRepository @Inject constructor(private val api: HermesApi, private val
         coroutineScope {
             list.map { b -> async { runCatching { api.soul(b.name) }.getOrNull()?.let { BotNames.setPersona(b.name, BotNames.headingOf(it)) } } }.awaitAll()
         }
+        runCatching { prefs.setBotNames(BotNames.personaSnapshot()) }
         return list
     }
 
@@ -48,14 +49,21 @@ class BotsRepository @Inject constructor(private val api: HermesApi, private val
         cloneFrom: String? = null,
         soul: String? = null,
     ): JsonElement {
-        val r = api.createBot(
-            jsonOf(
-                "name" to name, "description" to description,
-                "provider" to provider, "model" to model,
-                "clone_from" to cloneFrom,
-                // Omit keep_skills to retain inherited skills. Hermes expects a list, not a flag.
-            ),
-        )
+        // Idempotent: a retry after a half-finished creation (persona or team setup failed) must not
+        // fail on "already exists"; it should carry on with the remaining steps.
+        val r = try {
+            api.createBot(
+                jsonOf(
+                    "name" to name, "description" to description,
+                    "provider" to provider, "model" to model,
+                    "clone_from" to cloneFrom,
+                    // Omit keep_skills to retain inherited skills. Hermes expects a list, not a flag.
+                ),
+            )
+        } catch (e: com.bobbot.core.net.HermesHttpException) {
+            val exists = runCatching { api.bots().any { it.name == name } }.getOrDefault(false)
+            if (exists && (e.code == 409 || e.code == 400 || e.code == 422)) jsonOf("ok" to true, "name" to name, "existing" to true) else throw e
+        }
         val persona = newBotPersona(name, description, soul)
         run {
             try { api.setSoul(name, persona) }
@@ -82,5 +90,5 @@ class BotsRepository @Inject constructor(private val api: HermesApi, private val
     suspend fun skills(name: String) = api.skills(name.takeIf { it != "default" })
     suspend fun toggleSkill(bot: String, skill: String, enabled: Boolean) = api.toggleSkill(skill, enabled, bot.takeIf { it != "default" })
     suspend fun toolsets(name: String) = api.toolsets(name.takeIf { it != "default" })
-    suspend fun sessions(name: String, limit: Int = 50) = api.sessions(name.takeIf { it != "default" }, limit)
+    suspend fun sessions(name: String, limit: Int = 50) = api.sessions(name.takeIf { it != "default" }, limit).filter { it.id.isNotBlank() }.distinctBy { it.id }
 }

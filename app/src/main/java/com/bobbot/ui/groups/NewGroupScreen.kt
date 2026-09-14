@@ -148,7 +148,7 @@ fun NewGroupScreen(onBack: () -> Unit, onCreated: (roomId: String) -> Unit) {
                     Checkbox(checked = selected, onCheckedChange = null, colors = CheckboxDefaults.colors(checkedColor = BobColors.Accent, checkmarkColor = BobColors.Bg))
                 }
             }
-            if (ui.bots.size < 2) item { Text("Create another bot first to start a group.", color = BobColors.TextFaint, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 16.dp)) }
+            if (ui.bots.size < 2) item { Text("A group needs two bots. Create another one from the inbox first.", color = BobColors.TextFaint, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 16.dp)) }
         }
     }
 }

@@ -23,6 +23,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -92,6 +93,7 @@ class InboxViewModel @Inject constructor(
                         needsYou = i.team?.needingYou?.map { it.profile }?.toSet() ?: emptySet(),
                     )
                 }
+                .catch { e -> _ui.update { it.copy(error = e.message ?: "Could not build the inbox") } }
                 .collect { rows -> _ui.update { it.copy(rows = rows, bots = bots.bots.value) } }
         }
         viewModelScope.launch {
@@ -102,17 +104,13 @@ class InboxViewModel @Inject constructor(
         viewModelScope.launch { chat.changes.collect { if (it == "sessions.changed") load(quiet = true) } }
         viewModelScope.launch { chat.completions.collect { load(quiet = true) } }
         viewModelScope.launch { runCatching { chat.connect() } }
-        // sessions.changed covers chats; worker heartbeats and desktop-side edits need an occasional ask.
-        viewModelScope.launch {
-            while (true) {
-                delay(60_000)
-                load(quiet = true)
-            }
-        }
     }
 
+    /** A refresh requested while one is running is not dropped; it runs once the current one finishes. */
+    private var reloadWanted = false
+
     fun load(quiet: Boolean = false) {
-        if (loadJob?.isActive == true) return
+        if (loadJob?.isActive == true) { reloadWanted = true; return }
         loadJob = viewModelScope.launch {
             if (!quiet) _ui.update { it.copy(loading = it.rows.isEmpty(), error = null) }
             try {
@@ -120,12 +118,13 @@ class InboxViewModel @Inject constructor(
                 val rows = roster.roster()
                 rosterRows.value = rows
                 runCatching { team.refresh() }
-                _ui.update { it.copy(loading = false, error = null, bots = botList, teammateMessaging = rows.any { r -> r.teammateMessaging }) }
+                _ui.update { it.copy(loading = false, error = null, bots = botList, teammateMessaging = rows.isNotEmpty() && rows.all { r -> r.teammateMessaging }) }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 _ui.update { it.copy(loading = false, error = e.message ?: "Could not load your bots") }
             }
             refreshRooms()
+            if (reloadWanted) { reloadWanted = false; load(quiet = true) }
         }
     }
 
@@ -188,6 +187,6 @@ class InboxViewModel @Inject constructor(
 
     /** Opening a row: groups are tracked locally; bots are marked read by the chat screen itself. */
     fun markRead(row: InboxRow) {
-        if (row.kind == InboxKind.GROUP) viewModelScope.launch { prefs.markSeen(row.key) }
+        if (row.kind == InboxKind.GROUP) viewModelScope.launch { runCatching { prefs.markSeen(row.key) } }
     }
 }
