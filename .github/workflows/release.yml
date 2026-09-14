@@ -1,0 +1,215 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-publication
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    outputs:
+      release_version: ${{ steps.release_meta.outputs.release_version }}
+      release_tag: ${{ steps.release_meta.outputs.release_tag }}
+      is_prerelease: ${{ steps.release_meta.outputs.is_prerelease }}
+      should_release: ${{ steps.release_meta.outputs.should_release }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - id: release_meta
+        name: Resolve Release Trigger
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: node scripts/resolve_release_trigger.js
+
+  validate:
+    needs: resolve
+    if: needs.resolve.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Release Commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Verify Release Commit Is Main HEAD
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          main_head="$(git rev-parse origin/main)"
+          release_sha="$(git rev-parse "$GITHUB_SHA")"
+
+          if [ "$release_sha" != "$main_head" ]; then
+            echo "Release commit must be the current origin/main HEAD." >&2
+            echo "Release commit: $release_sha" >&2
+            echo "origin/main: $main_head" >&2
+            exit 1
+          fi
+
+      - name: Verify Android Version Metadata
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.release_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/get_version.js
+
+          actual_version="$(node -e 'const fs = require("fs"); const txt = fs.readFileSync("app/build.gradle.kts", "utf8"); const match = txt.match(/versionName\s*=\s*"([^"]+)"/); if (!match) process.exit(1); process.stdout.write(match[1]);')"
+
+          if [ "$actual_version" != "$RELEASE_VERSION" ]; then
+            echo "Release metadata changed after trigger resolution. Expected $RELEASE_VERSION; found $actual_version." >&2
+            exit 1
+          fi
+
+      - name: Test Release Trigger Logic
+        run: node --test scripts/tests/*.test.js
+
+      - name: Run Release Gate
+        run: >-
+          ./gradlew --no-daemon
+          test
+          lintDebug
+          assembleDebug
+
+  build-and-release:
+    needs: [resolve, validate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Release Commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Verify Signing Secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.BB_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.BB_SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BB_SIGNING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.BB_SIGNING_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${KEYSTORE_B64:-}" ]; then echo "Missing secret: BB_KEYSTORE_B64"; missing=1; fi
+          if [ -z "${STORE_PASSWORD:-}" ]; then echo "Missing secret: BB_SIGNING_STORE_PASSWORD"; missing=1; fi
+          if [ -z "${KEY_ALIAS:-}" ]; then echo "Missing secret: BB_SIGNING_KEY_ALIAS"; missing=1; fi
+          if [ -z "${KEY_PASSWORD:-}" ]; then echo "Missing secret: BB_SIGNING_KEY_PASSWORD"; missing=1; fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Decode Keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.BB_KEYSTORE_B64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/bobbot_keystore.jks"
+          echo "BB_SIGNING_STORE_FILE=$RUNNER_TEMP/bobbot_keystore.jks" >> "$GITHUB_ENV"
+          echo "BB_SIGNING_STORE_TYPE=PKCS12" >> "$GITHUB_ENV"
+
+      - name: Build Signed Release APK
+        env:
+          BB_SIGNING_STORE_PASSWORD: ${{ secrets.BB_SIGNING_STORE_PASSWORD }}
+          BB_SIGNING_KEY_ALIAS: ${{ secrets.BB_SIGNING_KEY_ALIAS }}
+          BB_SIGNING_KEY_PASSWORD: ${{ secrets.BB_SIGNING_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Prepare Dist
+        id: dist
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.release_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          APK_PATH="$(ls -1 app/build/outputs/apk/release/*.apk | head -n 1)"
+          if [ -z "$APK_PATH" ]; then
+            echo "Could not locate release APK under app/build/outputs/apk/release/"
+            exit 1
+          fi
+
+          OUT_APK="dist/BobBot-${RELEASE_VERSION}.apk"
+          cp "$APK_PATH" "$OUT_APK"
+          echo "apk_path=$OUT_APK" >> "$GITHUB_OUTPUT"
+
+      - name: Extract Release Notes
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.release_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            node scripts/extract_changelog_section.js "$RELEASE_VERSION" || {
+              echo "## v$RELEASE_VERSION"
+              echo
+              echo "Signed release build for BobBot $RELEASE_VERSION."
+            }
+          } > dist/release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.release_tag }}
+          name: ${{ needs.resolve.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          body_path: dist/release-notes.md
+          files: |
+            ${{ steps.dist.outputs.apk_path }}
+          draft: false
+          prerelease: ${{ needs.resolve.outputs.is_prerelease == 'true' }}
+
+      - name: Upload Artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-dist-${{ needs.resolve.outputs.release_version }}
+          path: dist/*

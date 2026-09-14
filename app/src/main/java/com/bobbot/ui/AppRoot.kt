@@ -56,6 +56,8 @@ import com.bobbot.ui.settings.SettingsScreen
 import com.bobbot.ui.setup.SetupScreen
 import com.bobbot.ui.system.SystemScreen
 import com.bobbot.ui.theme.BobColors
+import com.bobbot.ui.update.UpdateSheet
+import com.bobbot.update.UpdateCheck
 
 private data class Tab(val route: Route, val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
 
@@ -71,6 +73,7 @@ private val tabs = listOf(
 fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
     val vm: AppViewModel = hiltViewModel()
     val boot by vm.boot.collectAsStateWithLifecycle()
+    val updateState by vm.updateState.collectAsStateWithLifecycle()
     val nav = rememberNavController()
 
     if (boot == null) { Box(Modifier.fillMaxSize()) ; return }
@@ -193,5 +196,10 @@ fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
             }
             composable<Route.System> { SystemScreen(onBack = { nav.popBackStack() }) }
         }
+    }
+
+    val update = updateState
+    if (setupDone && update is UpdateCheck.Available) {
+        UpdateSheet(info = update.info, manager = vm.apkUpdateManager, onDismiss = vm::dismissUpdate)
     }
 }

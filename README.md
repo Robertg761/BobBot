@@ -32,6 +32,15 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 JDK 17 (`gradle.properties` pins `org.gradle.java.home`), AGP 9.3, Kotlin 2.4, compileSdk 37, minSdk 26.
 
+## Releases and updates
+
+Releases work the same way as LunarLog and Rosewater:
+
+- **Cutting a release**: bump `versionCode` and `versionName` in `app/build.gradle.kts`, add a matching `## [x.y.z] - YYYY-MM-DD` section to `CHANGELOG.md`, and push to `main`. The Release workflow detects the version bump, runs the test/lint gate, builds a signed APK, and publishes a GitHub Release tagged `vx.y.z` with the changelog section as release notes. Pushing a `vx.y.z` tag that matches the current version works too.
+- **Signing**: the workflow reads `BB_KEYSTORE_B64`, `BB_SIGNING_STORE_PASSWORD`, `BB_SIGNING_KEY_ALIAS`, and `BB_SIGNING_KEY_PASSWORD` from repository secrets. Locally, a `keystore.properties` at the repo root (gitignored) with the same keys signs `./gradlew :app:assembleRelease`.
+- **In-app updates**: release builds check GitHub Releases on launch (at most every 6 hours) and offer the new APK in a bottom sheet. Settings → About has a manual "Check now" button. Debug builds never auto-check because they are signed with a different key.
+- The updater needs the repository's releases to be readable without a token, so the repo must be public for auto-update to work.
+
 ## Architecture
 
 ```

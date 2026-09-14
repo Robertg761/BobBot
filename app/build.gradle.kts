@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -5,6 +7,28 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
 }
+
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) {
+        file.inputStream().use(::load)
+    }
+}
+
+fun signingValue(name: String): String? =
+    System.getenv(name)?.takeIf { it.isNotBlank() }
+        ?: keystoreProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+
+// Optional local/CI signing. If present, release variants are signed automatically.
+val bbSigningStoreFile = signingValue("BB_SIGNING_STORE_FILE")
+val bbSigningStorePassword = signingValue("BB_SIGNING_STORE_PASSWORD")
+val bbSigningKeyAlias = signingValue("BB_SIGNING_KEY_ALIAS")
+val bbSigningKeyPassword = signingValue("BB_SIGNING_KEY_PASSWORD")
+val bbSigningStoreType = signingValue("BB_SIGNING_STORE_TYPE")
+val bbHasSigning = !bbSigningStoreFile.isNullOrBlank() &&
+    !bbSigningStorePassword.isNullOrBlank() &&
+    !bbSigningKeyAlias.isNullOrBlank() &&
+    !bbSigningKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.bobbot"
@@ -17,13 +41,33 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "GITHUB_OWNER", "\"Robertg761\"")
+        buildConfigField("String", "GITHUB_REPO", "\"BobBot\"")
+    }
+
+    if (bbHasSigning) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(bbSigningStoreFile!!)
+                if (!bbSigningStoreType.isNullOrBlank()) {
+                    storeType = bbSigningStoreType
+                }
+                storePassword = bbSigningStorePassword
+                keyAlias = bbSigningKeyAlias
+                keyPassword = bbSigningKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Kept unminified, like the other sideloaded apps, so update installs are predictable.
+            isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (bbHasSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
             applicationIdSuffix = ".debug"

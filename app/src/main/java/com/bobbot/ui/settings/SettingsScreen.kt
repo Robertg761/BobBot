@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -81,6 +82,7 @@ fun SettingsScreen(
     val ctx = LocalContext.current
 
     var editUrl by remember { mutableStateOf(false) }
+    var showUpdate by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
     var linkRunning by remember { mutableStateOf(LinkService.isRunning) }
 
@@ -309,6 +311,7 @@ fun SettingsScreen(
 
             // ---------- About ----------
             SectionHeader("About")
+            val updateState by vm.updateState.collectAsStateWithLifecycle()
             BobCard {
                 KeyValueRow("BobBot", state.appVersion.ifBlank { "—" })
                 Spacer(Modifier.height(4.dp))
@@ -316,10 +319,47 @@ fun SettingsScreen(
                     Pill("Built for Hermes Agent", color = BobColors.Accent)
                     if (state.serverVersion.isNotBlank()) Pill("Hermes ${state.serverVersion}", color = BobColors.Mint)
                 }
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = BobColors.OutlineSoft)
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Updates", color = BobColors.Text, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            when (val u = updateState) {
+                                is com.bobbot.update.UpdateCheck.Checking -> "Checking GitHub releases…"
+                                is com.bobbot.update.UpdateCheck.Available -> "Version ${u.info.latestVersionName} is available"
+                                is com.bobbot.update.UpdateCheck.UpToDate -> "You're on the latest version"
+                                is com.bobbot.update.UpdateCheck.Failed -> u.message
+                                else -> "Release builds check automatically every few hours"
+                            },
+                            color = when (updateState) {
+                                is com.bobbot.update.UpdateCheck.Available -> BobColors.Mint
+                                is com.bobbot.update.UpdateCheck.Failed -> BobColors.Rose
+                                else -> BobColors.TextMuted
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    when (val u = updateState) {
+                        is com.bobbot.update.UpdateCheck.Checking -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = BobColors.Accent)
+                        is com.bobbot.update.UpdateCheck.Available -> Button(
+                            onClick = { showUpdate = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = BobColors.Mint, contentColor = BobColors.Bg),
+                        ) { Text("Update") }
+                        else -> OutlinedButton(onClick = vm::checkForUpdates) { Text("Check now", color = BobColors.Accent) }
+                    }
+                }
             }
 
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    val pendingUpdate = updateStateForSheet(vm)
+    if (showUpdate && pendingUpdate != null) {
+        com.bobbot.ui.update.UpdateSheet(info = pendingUpdate, manager = vm.apkUpdateManager, onDismiss = { showUpdate = false })
     }
 
     if (editUrl) {
@@ -410,4 +450,11 @@ private fun ShortcutRow(title: String, subtitle: String, icon: ImageVector, onCl
         }
         Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = BobColors.TextFaint)
     }
+}
+
+
+@Composable
+private fun updateStateForSheet(vm: SettingsViewModel): com.bobbot.update.UpdateInfo? {
+    val u by vm.updateState.collectAsStateWithLifecycle()
+    return (u as? com.bobbot.update.UpdateCheck.Available)?.info
 }

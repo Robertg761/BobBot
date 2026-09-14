@@ -58,7 +58,12 @@ class SettingsViewModel @Inject constructor(
     private val auth: AuthManager,
     private val client: HermesClient,
     private val okHttp: OkHttpClient,
+    private val updates: com.bobbot.update.UpdateRepository,
+    val apkUpdateManager: com.bobbot.update.ApkUpdateManager,
 ) : ViewModel() {
+    val updateState: kotlinx.coroutines.flow.StateFlow<com.bobbot.update.UpdateCheck> = updates.state
+    fun checkForUpdates() { viewModelScope.launch { updates.check(manual = true) } }
+    fun openUpdate() { /* the sheet is driven by updateState; nothing else to do */ }
 
     private val _state = MutableStateFlow(SettingsUiState(appVersion = com.bobbot.BuildConfig.VERSION_NAME))
     val state: StateFlow<SettingsUiState> = _state
