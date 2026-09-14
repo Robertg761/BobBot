@@ -74,6 +74,7 @@ import com.bobbot.ui.components.BotAvatar
 import com.bobbot.ui.components.Pill
 import com.bobbot.ui.models.ModelPickerSheet
 import com.bobbot.ui.setup.fieldColors
+import com.bobbot.data.repo.botName
 import com.bobbot.ui.theme.BobColors
 import com.bobbot.ui.theme.botColor
 
@@ -102,6 +103,7 @@ fun ChatScreen(
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(vm::attach) }
     val color = botColor(profile)
+    val botLabel = botName(profile)
 
     Scaffold(
         containerColor = BobColors.Bg,
@@ -115,9 +117,9 @@ fun ChatScreen(
                         BotAvatar(profile, 34.dp)
                         Spacer(Modifier.width(10.dp))
                         Column {
-                            Text(session?.title?.ifBlank { null } ?: profile, style = MaterialTheme.typography.titleMedium, color = BobColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(session?.title?.ifBlank { null } ?: botLabel, style = MaterialTheme.typography.titleMedium, color = BobColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(profile, style = MaterialTheme.typography.labelSmall, color = color)
+                                Text(botLabel, style = MaterialTheme.typography.labelSmall, color = color)
                                 Text(" · ", color = BobColors.TextFaint, style = MaterialTheme.typography.labelSmall)
                                 Text(
                                     when {
@@ -153,7 +155,7 @@ fun ChatScreen(
                 ui.connecting -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = BobColors.Accent)
                     Spacer(Modifier.height(12.dp))
-                    Text("Opening chat with $profile…", color = BobColors.TextMuted)
+                    Text("Opening chat with $botLabel…", color = BobColors.TextMuted)
                 }
                 ui.error != null && ui.liveId == null -> Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Couldn't open this chat", style = MaterialTheme.typography.titleMedium, color = BobColors.Text)
@@ -176,7 +178,7 @@ fun ChatScreen(
         AlertDialog(
             onDismissRequest = {},
             containerColor = BobColors.SurfaceRaised,
-            title = { Text("$profile wants to run a command") },
+            title = { Text("$botLabel wants to run a command") },
             text = {
                 Column {
                     if (a.description.isNotBlank()) { Text(a.description, color = BobColors.TextMuted); Spacer(Modifier.height(8.dp)) }
@@ -200,7 +202,7 @@ fun ChatScreen(
         AlertDialog(
             onDismissRequest = {},
             containerColor = BobColors.SurfaceRaised,
-            title = { Text("$profile is asking") },
+            title = { Text("$botLabel is asking") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(c.question, color = BobColors.Text)
@@ -290,7 +292,7 @@ private fun EmptyChat(profile: String, description: String?, model: String) {
     Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         BotAvatar(profile, 72.dp)
         Spacer(Modifier.height(16.dp))
-        Text(profile, style = MaterialTheme.typography.headlineSmall, color = BobColors.Text)
+        Text(botName(profile), style = MaterialTheme.typography.headlineSmall, color = BobColors.Text)
         if (!description.isNullOrBlank()) { Spacer(Modifier.height(6.dp)); Text(description, color = BobColors.TextMuted, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
         if (model.isNotBlank()) { Spacer(Modifier.height(10.dp)); Pill(model.substringAfterLast('/'), color = BobColors.TextMuted) }
         Spacer(Modifier.height(24.dp))

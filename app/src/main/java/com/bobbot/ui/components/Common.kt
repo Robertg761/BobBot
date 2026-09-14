@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.bobbot.data.repo.botName
 import com.bobbot.ui.theme.BobColors
 import com.bobbot.ui.theme.botColor
 
@@ -99,7 +100,8 @@ fun Pill(
 
 @Composable
 fun BotAvatar(name: String, size: Dp = 36.dp, modifier: Modifier = Modifier, color: Color = botColor(name)) {
-    val initials = name.split(' ', '-', '_').filter { it.isNotBlank() }.take(2)
+    val display = botName(name)
+    val initials = display.split(' ', '-', '_').filter { it.isNotBlank() }.take(2)
         .joinToString("") { it.first().uppercaseChar().toString() }
         .ifBlank { "?" }
     Box(

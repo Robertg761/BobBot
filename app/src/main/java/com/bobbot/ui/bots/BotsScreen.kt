@@ -48,6 +48,7 @@ import com.bobbot.ui.components.EmptyState
 import com.bobbot.ui.components.LoadingRow
 import com.bobbot.ui.components.Pill
 import com.bobbot.ui.components.StatusDot
+import com.bobbot.data.repo.botName
 import com.bobbot.ui.theme.BobColors
 import com.bobbot.ui.theme.botColor
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -197,7 +198,7 @@ private fun BotCard(bot: Bot, onOpen: () -> Unit, onChat: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        bot.name,
+                        botName(bot.name),
                         style = MaterialTheme.typography.titleMedium,
                         color = BobColors.Text,
                         maxLines = 1,

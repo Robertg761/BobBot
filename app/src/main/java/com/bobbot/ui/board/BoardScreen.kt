@@ -66,6 +66,7 @@ import com.bobbot.ui.components.EmptyState
 import com.bobbot.ui.components.LoadingRow
 import com.bobbot.ui.components.Pill
 import com.bobbot.ui.components.SectionHeader
+import com.bobbot.data.repo.botName
 import com.bobbot.ui.theme.BobColors
 import com.bobbot.ui.theme.botColor
 
@@ -297,7 +298,7 @@ private fun RelayHeroCard(onOpenRelay: () -> Unit) {
 private fun FromToLine(from: String, to: String, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Text(
-            from,
+            botName(from),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = botColor(from),
@@ -306,7 +307,7 @@ private fun FromToLine(from: String, to: String, modifier: Modifier = Modifier) 
         )
         Text("  →  ", style = MaterialTheme.typography.titleSmall, color = BobColors.TextFaint)
         Text(
-            to,
+            botName(to),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = botColor(to),

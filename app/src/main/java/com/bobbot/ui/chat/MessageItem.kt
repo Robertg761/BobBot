@@ -49,6 +49,7 @@ import com.bobbot.core.net.int
 import com.bobbot.data.repo.ChatItem
 import com.bobbot.ui.components.BotAvatar
 import com.bobbot.ui.components.Pill
+import com.bobbot.data.repo.botName
 import com.bobbot.ui.theme.BobColors
 import com.bobbot.ui.theme.botColor
 import com.mikepenz.markdown.m3.Markdown
@@ -82,7 +83,7 @@ private fun UserBubble(m: ChatItem.User) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp, end = 4.dp)) {
                 Icon(Icons.Outlined.SwapHoriz, null, tint = botColor(m.fromBot), modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("from ${m.fromBot} via BobBot", style = MaterialTheme.typography.labelSmall, color = botColor(m.fromBot))
+                Text("from ${botName(m.fromBot)} via BobBot", style = MaterialTheme.typography.labelSmall, color = botColor(m.fromBot))
             }
         }
         Box(
@@ -226,7 +227,7 @@ private fun DelegationCard(d: ChatItem.Delegation, profile: String) {
                 Icon(Icons.Outlined.SwapHoriz, null, tint = BobColors.Mint, modifier = Modifier.padding(horizontal = 4.dp).size(16.dp))
                 BotAvatar("sub-agent", 22.dp, color = BobColors.Mint)
                 Spacer(Modifier.width(8.dp))
-                Text("$profile → sub-agent", style = MaterialTheme.typography.labelLarge, color = BobColors.Mint, fontWeight = FontWeight.SemiBold)
+                Text("${botName(profile)} → sub-agent", style = MaterialTheme.typography.labelLarge, color = BobColors.Mint, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.weight(1f))
                 if (running) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp, color = BobColors.Mint)
                 else Pill(d.status, color = if (d.status == "complete") BobColors.Mint else BobColors.Amber)

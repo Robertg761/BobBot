@@ -66,6 +66,7 @@ import com.bobbot.ui.components.BobCard
 import com.bobbot.ui.components.BotAvatar
 import com.bobbot.ui.components.LoadingRow
 import com.bobbot.ui.components.SectionHeader
+import com.bobbot.data.repo.botName
 import com.bobbot.ui.theme.BobColors
 import com.bobbot.ui.theme.botColor
 import kotlin.math.roundToInt
@@ -96,7 +97,7 @@ fun RelayScreen(onBack: () -> Unit) {
         containerColor = BobColors.Bg,
         topBar = {
             TopAppBar(
-                title = { Text(if (setupMode) "New relay" else "${relay.botA} ↔ ${relay.botB}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(if (setupMode) "New relay" else "${botName(relay.botA)} ↔ ${botName(relay.botB)}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = BobColors.Text)
@@ -418,7 +419,7 @@ private fun ThinkingRow(speaking: String) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         BotAvatar(speaking, size = 24.dp)
         Spacer(Modifier.width(8.dp))
-        Text("$speaking is thinking…", style = MaterialTheme.typography.bodySmall, color = BobColors.TextFaint)
+        Text("${botName(speaking)} is thinking…", style = MaterialTheme.typography.bodySmall, color = BobColors.TextFaint)
     }
 }
 
@@ -441,7 +442,7 @@ private fun RelayBubble(message: RelayMessage, alignEnd: Boolean) {
             BotAvatar(message.to, size = 24.dp)
             Spacer(Modifier.width(8.dp))
             Text(
-                message.from,
+                botName(message.from),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = accent,
@@ -450,7 +451,7 @@ private fun RelayBubble(message: RelayMessage, alignEnd: Boolean) {
             )
             Text(" → ", style = MaterialTheme.typography.labelLarge, color = BobColors.TextFaint)
             Text(
-                message.to,
+                botName(message.to),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = botColor(message.to),

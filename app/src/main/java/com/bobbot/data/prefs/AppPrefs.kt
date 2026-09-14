@@ -60,6 +60,7 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
         val WATCH_RELAY = booleanPreferencesKey("watch_relay")
         val LAST_CRON_SEEN = stringPreferencesKey("last_cron_seen")
         val LAST_BOARD_CURSOR = longPreferencesKey("last_board_cursor")
+        val NICKNAMES = stringPreferencesKey("bot_nicknames")
         val PKCE_VERIFIER = stringPreferencesKey("pkce_verifier")
         val PKCE_STATE = stringPreferencesKey("pkce_state")
     }
@@ -131,6 +132,19 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
         val s = p[K.PKCE_STATE] ?: return null
         context.dataStore.edit { it.remove(K.PKCE_VERIFIER); it.remove(K.PKCE_STATE) }
         return v to s
+    }
+
+    /** Local display names per profile, stored as "profile=name" lines. */
+    suspend fun currentNicknames(): Map<String, String> =
+        (context.dataStore.data.first()[K.NICKNAMES] ?: "").lineSequence()
+            .filter { it.contains('=') }
+            .associate { it.substringBefore('=') to it.substringAfter('=') }
+            .filterValues { it.isNotBlank() }
+
+    suspend fun setNickname(profile: String, nickname: String) {
+        val map = currentNicknames().toMutableMap()
+        if (nickname.isBlank()) map.remove(profile) else map[profile] = nickname.trim().replace('\n', ' ')
+        context.dataStore.edit { it[K.NICKNAMES] = map.entries.joinToString("\n") { (k, v) -> "$k=$v" } }
     }
 
     suspend fun resetAll() = context.dataStore.edit { it.clear() }

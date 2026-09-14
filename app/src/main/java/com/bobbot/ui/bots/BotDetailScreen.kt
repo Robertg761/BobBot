@@ -80,6 +80,7 @@ import com.bobbot.ui.components.SectionHeader
 import com.bobbot.ui.components.StatusDot
 import com.bobbot.ui.models.ModelPickerSheet
 import com.bobbot.ui.models.modelSpec
+import com.bobbot.data.repo.botName
 import com.bobbot.ui.theme.BobColors
 import com.bobbot.ui.theme.botColor
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -321,6 +322,13 @@ class BotDetailViewModel @Inject constructor(
         }
     }
 
+    fun setNickname(nickname: String) {
+        viewModelScope.launch {
+            runCatching { bots.setNickname(name, nickname) }
+                .onFailure { e -> _ui.update { it.copy(notice = e.message ?: "Could not save display name") } }
+        }
+    }
+
     fun rename(newName: String, onDone: () -> Unit) {
         val target = newName.trim()
         if (target.isBlank() || target == name) return
@@ -367,6 +375,7 @@ fun BotDetailScreen(
 
     var showPicker by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
+    var showNickname by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var editingDesc by remember { mutableStateOf(false) }
 
@@ -378,7 +387,7 @@ fun BotDetailScreen(
         contentColor = BobColors.Text,
         topBar = {
             TopAppBar(
-                title = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(botName(name), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = BobColors.Text)
@@ -441,7 +450,7 @@ fun BotDetailScreen(
                 ) {
                     Icon(Icons.Outlined.Forum, null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text("Chat with $name", style = MaterialTheme.typography.titleSmall)
+                    Text("Chat with ${botName(name)}", style = MaterialTheme.typography.titleSmall)
                 }
             }
 
@@ -555,7 +564,7 @@ fun BotDetailScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             if (bot?.isDefault == true) {
-                                "This is the default bot. It cannot be deleted."
+                                "This is the default bot. Hermes can't rename or delete its profile, but you can give it a display name."
                             } else {
                                 "Renaming changes the profile directory. Deleting removes its persona, config and chats."
                             },
@@ -566,14 +575,14 @@ fun BotDetailScreen(
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedButton(
-                            onClick = { showRename = true },
+                            onClick = { if (bot?.isDefault == true) showNickname = true else showRename = true },
                             enabled = !ui.busy,
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.weight(1f),
                         ) {
                             Icon(Icons.Outlined.DriveFileRenameOutline, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Rename")
+                            Text(if (bot?.isDefault == true) "Display name" else "Rename")
                         }
                         Button(
                             onClick = { showDelete = true },
@@ -606,6 +615,14 @@ fun BotDetailScreen(
                 showPicker = false
                 vm.applyModel(provider, model)
             },
+        )
+    }
+
+    if (showNickname) {
+        NicknameDialog(
+            current = botName(name),
+            onDismiss = { showNickname = false },
+            onConfirm = { nick -> showNickname = false; vm.setNickname(nick) },
         )
     }
 
@@ -898,4 +915,29 @@ internal fun relativeTime(raw: Double): String {
         diff < 2_592_000 -> "${diff / 86_400}d ago"
         else -> "${diff / 2_592_000}mo ago"
     }
+}
+
+
+@Composable
+private fun NicknameDialog(current: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var value by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = BobColors.SurfaceRaised,
+        titleContentColor = BobColors.Text,
+        textContentColor = BobColors.TextMuted,
+        title = { Text("Display name") },
+        text = {
+            Column {
+                Text(
+                    "Shown everywhere in BobBot instead of the profile id. Leave it empty to fall back to the persona's heading in SOUL.md.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(value = value, onValueChange = { value = it }, singleLine = true, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(value.trim()) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = BobColors.TextMuted) } },
+    )
 }

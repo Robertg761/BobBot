@@ -84,6 +84,7 @@ import com.bobbot.ui.components.EmptyState
 import com.bobbot.ui.components.LoadingRow
 import com.bobbot.ui.components.Pill
 import com.bobbot.ui.components.SectionHeader
+import com.bobbot.data.repo.botName
 import com.bobbot.ui.theme.BobColors
 
 private fun deliveryColor(deliver: String): Color = when (deliver.lowercase()) {
@@ -397,7 +398,7 @@ private fun JobCard(
             )
             Spacer(Modifier.height(6.dp))
             TextButton(onClick = { onChat(job.profile) }) {
-                Text("Chat with ${job.profile}", color = BobColors.Accent)
+                Text("Chat with ${botName(job.profile)}", color = BobColors.Accent)
             }
 
             Spacer(Modifier.height(6.dp))

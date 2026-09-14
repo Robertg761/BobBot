@@ -55,6 +55,7 @@ import com.bobbot.ui.components.LoadingRow
 import com.bobbot.ui.components.Pill
 import com.bobbot.ui.components.StatusDot
 import com.bobbot.ui.setup.fieldColors
+import com.bobbot.data.repo.botName
 import com.bobbot.ui.theme.BobColors
 import com.bobbot.ui.theme.botColor
 
@@ -102,7 +103,7 @@ fun SessionsScreen(
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Pill("All bots", color = if (ui.filter == null) BobColors.Accent else BobColors.TextMuted, onClick = { vm.setFilter(null) }) }
                 items(ui.bots) { b ->
-                    Pill(b.name, color = if (ui.filter == b.name) botColor(b.name) else BobColors.TextMuted, onClick = { vm.setFilter(b.name) })
+                    Pill(botName(b.name), color = if (ui.filter == b.name) botColor(b.name) else BobColors.TextMuted, onClick = { vm.setFilter(b.name) })
                 }
                 item { Pill("+ Bots", color = BobColors.Mint, onClick = onOpenBots) }
             }
@@ -130,7 +131,7 @@ fun SessionsScreen(
                         BobCard(onClick = { pickBot = false; onNewChat(b.name) }, padding = PaddingValues(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 BotAvatar(b.name, 32.dp); Spacer(Modifier.width(12.dp))
-                                Column { Text(b.name, color = BobColors.Text, fontWeight = FontWeight.SemiBold); Text(b.model, style = MaterialTheme.typography.bodySmall, color = BobColors.TextMuted) }
+                                Column { Text(botName(b.name), color = BobColors.Text, fontWeight = FontWeight.SemiBold); Text(b.model, style = MaterialTheme.typography.bodySmall, color = BobColors.TextMuted) }
                             }
                         }
                     }
@@ -158,7 +159,7 @@ private fun SessionRow(s: SessionSummary, onClick: () -> Unit, vm: SessionsViewM
                 Text(s.preview.ifBlank { s.model }, color = BobColors.TextMuted, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(s.profile, color = botColor(s.profile), style = MaterialTheme.typography.labelSmall)
+                    Text(botName(s.profile), color = botColor(s.profile), style = MaterialTheme.typography.labelSmall)
                     Text("·", color = BobColors.TextFaint)
                     Text(relativeTime(s.lastActive), color = BobColors.TextFaint, style = MaterialTheme.typography.labelSmall)
                     if (s.messageCount > 0) { Text("·", color = BobColors.TextFaint); Text("${s.messageCount} msgs", color = BobColors.TextFaint, style = MaterialTheme.typography.labelSmall) }

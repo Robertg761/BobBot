@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.3] - 2026-09-14
+
+### Changed
+- **Bots show their persona name**: the default profile can't be renamed in Hermes (it *is* the ~/.hermes directory), so BobBot now shows each bot's persona name from the top of its SOUL.md, e.g. "Clove" instead of "default", across chats, avatars, the bot list, the network view, and relays.
+- **Display name**: the default bot's Rename action is now "Display name", a local nickname that overrides the persona heading. Other bots keep the real profile rename.
+
 ## [1.0.2] - 2026-09-14
 
 ### Fixed
