@@ -251,7 +251,7 @@ fun ChatScreen(
                             Text("Review", style = MaterialTheme.typography.labelSmall, color = BobColors.Accent)
                         }
                     }
-                    LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(state = listState, contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 24.dp), modifier = Modifier.fillMaxSize()) {
                     if (items.isEmpty()) item(key = "intro") { Intro(profile, ui.bot?.description) }
                     // Tool and system lines carry no time; the last timed entry decides whether a new day started.
                     var previousTimed: ChatItem? = null

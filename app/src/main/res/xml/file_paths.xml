@@ -4,4 +4,8 @@
     <external-files-path
         name="external_files"
         path="." />
+    <!-- The last crash report, shared from Settings. -->
+    <files-path
+        name="crash"
+        path="crash/" />
 </paths>

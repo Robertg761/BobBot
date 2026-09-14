@@ -253,7 +253,7 @@ private fun UserBubble(m: ChatItem.User, groupedAbove: Boolean, groupedBelow: Bo
 @Composable
 private fun AssistantBubble(m: ChatItem.Assistant, profile: String, groupedAbove: Boolean, groupedBelow: Boolean, onLongPress: ((ChatItem) -> Unit)? = null, hideReasoning: Boolean = false) {
     Column(Modifier.fillMaxWidth().padding(end = 40.dp), horizontalAlignment = Alignment.Start) {
-        if (m.reasoning.isNotBlank() && !hideReasoning) ReasoningToggle(m.reasoning, thinking = m.streaming && m.text.isBlank())
+        if (m.reasoning.isNotBlank() && !hideReasoning) ReasoningToggle(m.reasoning, thinking = m.streaming && m.text.isBlank(), quiet = true)
         if (m.text.isNotBlank()) {
             Box(
                 Modifier.widthIn(max = BubbleMaxWidth)
@@ -428,17 +428,23 @@ fun WorkRow(entry: Entry.Run, profile: String, live: Boolean, trailingReasoning:
 
 /** The bot's thinking, folded away behind one small line. */
 @Composable
-fun ReasoningToggle(reasoning: String, thinking: Boolean = false) {
+fun ReasoningToggle(reasoning: String, thinking: Boolean = false, quiet: Boolean = false) {
     var showReasoning by remember { mutableStateOf(false) }
+    // Quiet: on its own in the transcript it reads like a work row, so every turn looks alike.
+    val tint = if (quiet && !thinking) BobColors.TextFaint else BobColors.Violet
     Column {
         Row(
-            Modifier.clip(RoundedCornerShape(10.dp)).clickable { showReasoning = !showReasoning }.padding(horizontal = 6.dp, vertical = 3.dp),
+            Modifier.clip(RoundedCornerShape(if (quiet) 12.dp else 10.dp)).clickable { showReasoning = !showReasoning }
+                .padding(horizontal = if (quiet) 8.dp else 6.dp, vertical = if (quiet) 5.dp else 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.Psychology, null, tint = BobColors.Violet, modifier = Modifier.size(13.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(if (thinking) "Thinking…" else "Thought process", style = MaterialTheme.typography.labelSmall, color = BobColors.Violet)
-            Icon(if (showReasoning) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, tint = BobColors.Violet, modifier = Modifier.size(14.dp))
+            Icon(Icons.Outlined.Psychology, null, tint = tint, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(if (quiet) 6.dp else 4.dp))
+            Text(
+                if (thinking) "Thinking…" else if (quiet) "Thought about it" else "Thought process",
+                style = if (quiet) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelSmall, color = tint,
+            )
+            Icon(if (showReasoning) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, tint = tint, modifier = Modifier.size(14.dp))
         }
         AnimatedVisibility(showReasoning) {
             Box(Modifier.widthIn(max = BubbleMaxWidth).padding(bottom = 6.dp).clip(RoundedCornerShape(12.dp)).background(BobColors.VioletSoft).padding(10.dp)) {

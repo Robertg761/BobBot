@@ -357,6 +357,10 @@ fun SettingsScreen(
                         else -> OutlinedButton(onClick = vm::checkForUpdates) { Text("Check now", color = BobColors.Accent) }
                     }
                 }
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = BobColors.OutlineSoft)
+                Spacer(Modifier.height(12.dp))
+                CrashReportRow()
             }
 
             Spacer(Modifier.height(24.dp))
@@ -473,6 +477,28 @@ private fun openLinkChannelSettings(ctx: android.content.Context) {
                     .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName)
                     .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
             )
+        }
+    }
+}
+
+/** The last crash, shareable without a cable. */
+@Composable
+private fun CrashReportRow() {
+    val ctx = LocalContext.current
+    var refresh by remember { mutableStateOf(0) }
+    val summary = remember(refresh) { com.bobbot.core.CrashLog.summary(ctx) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Report a problem", color = BobColors.Text, style = MaterialTheme.typography.titleSmall)
+            Text(
+                summary ?: "No crashes recorded. If BobBot ever crashes, the report appears here.",
+                color = if (summary != null) BobColors.Rose else BobColors.TextMuted, style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        if (summary != null) {
+            TextButton(onClick = { com.bobbot.core.CrashLog.clear(ctx); refresh++ }) { Text("Clear", color = BobColors.TextMuted) }
+            OutlinedButton(onClick = { com.bobbot.core.CrashLog.shareIntent(ctx)?.let { runCatching { ctx.startActivity(it) } } }) { Text("Share", color = BobColors.Accent) }
         }
     }
 }

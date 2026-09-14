@@ -31,8 +31,6 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:allowEmbedded="true"
-            android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.BobBot.Splash">
             <intent-filter>
@@ -63,6 +61,15 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+
+        <!-- Chat bubbles: a standard-launch, embeddable activity that shows one bot's conversation. -->
+        <activity
+            android:name=".BubbleActivity"
+            android:exported="false"
+            android:allowEmbedded="true"
+            android:documentLaunchMode="always"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.BobBot" />
 
         <service
             android:name=".service.LinkService"

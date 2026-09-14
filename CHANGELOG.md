@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.1] - 2026-09-14
+
+### Changed
+- **Crash reports you can send.** If BobBot crashes, the report is kept on the phone. Settings › About › Report a problem shows when it happened, with Share (any app: email, Telegram, a chat with your bot) and Clear.
+- **Chat bubbles.** Bot conversations can open as Android chat bubbles once you allow bubbles for BobBot in the notification's settings. A dedicated bubble activity shows just that chat.
+- A reply's own thinking, when there were no tool calls, shows as the same quiet "Thought about it" row as the work rows, so every turn looks alike.
+- The last message's time label no longer hides behind the message bar.
+
+### Verified
+- The Allow / Allow here / Deny buttons on a "needs your decision" notification were exercised against a live request: Allow recorded the approval on the server and swapped the notification for "Allowed for Steve".
+
 ## [1.4.0] - 2026-09-14
 
 ### Changed

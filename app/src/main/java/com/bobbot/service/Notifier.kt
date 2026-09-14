@@ -285,7 +285,10 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
      * the conversation, and it needs the shortcut set above, so it is strictly a bonus.
      */
     private fun bubble(profile: String): NotificationCompat.BubbleMetadata? {
-        val target = openApp(null, profile) ?: return null
+        val cls = runCatching { Class.forName("com.bobbot.BubbleActivity") }.getOrNull() ?: return null
+        val intent = Intent(ctx, cls).putExtra("open_profile", profile)
+        // Bubble intents must stay mutable so the system can attach its own extras.
+        val target = PendingIntent.getActivity(ctx, ("bubble:$profile").hashCode() and 0x7fffffff, intent, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return NotificationCompat.BubbleMetadata.Builder(target, Shortcuts.avatar(ctx, profile))
             .setDesiredHeight(600)
             .setAutoExpandBubble(false)
