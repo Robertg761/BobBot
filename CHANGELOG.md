@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0] - 2026-09-14
+
+### Changed
+- **BobBot is now a messages app.** The tab bar is gone. Home is an inbox with one row per bot: avatar, name, last message, time, pin, and an unread marker when a bot replied while you were away. A dot on the avatar shows a bot that is working or waiting on you. Tap a bot to continue its ongoing conversation; long-press for pin, profile, or a separate task chat. Group conversations live in the same list. Modeled on how Grok Bot treats bots, not sessions, as the main objects.
+- **Chat looks like messaging**: blue bubbles for you, grey for the bot, tighter spacing inside a run of messages, a typing indicator while the bot works, and tool calls as quiet activity lines. Approval, clarify and sudo prompts arrive inline in the transcript instead of as dialogs. Drafts survive leaving a chat. Model and reasoning switching moved to the ⋮ menu; the header shows the current model and status, and tapping it opens the bot's profile.
+- **Groups** got a real chat screen: bubbles with each bot's avatar and name, cards for approvals and retries, a stop button in the header, and a "New group" picker from the + button.
+- **Bot profile** now lists the bot's automations and calls its extra chats "task chats", with a shortcut to start one. Bot network, Automations and Settings open from the ⋮ menu on the inbox and have back buttons.
+- **A bot's conversation is now Hermes' own "Bot Chat"** for that profile, shared with the Hermes desktop app and with `bot-chat:` cron delivery, instead of a session id remembered on the phone. Unread state is Hermes' read watermark, so it stays in step across devices, and a bot shows as working when a server-side worker is running for it even if the phone started nothing. Direct chats BobBot created before this release stay available under the bot's task chats.
+
+### Removed
+- The Bots and Chats tabs. Every bot is an inbox row, and past task chats are reachable from a bot's profile or from inbox search.
+- The client-side relay feature and its notification toggle. Hermes-hosted groups replace it.
+
 ## [1.1.2] - 2026-09-14
 
 ### Fixed

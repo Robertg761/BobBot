@@ -10,7 +10,7 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 
 /**
- * Tiny, defensive time helpers shared by the board, relay and automations screens.
+ * Tiny, defensive time helpers shared by the board and automations screens.
  * Server timestamps arrive in several shapes (ISO with/without zone, epoch seconds,
  * "yyyy-MM-dd HH:mm:ss"), so every parse is best-effort and falls back to the raw string.
  */

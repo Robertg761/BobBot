@@ -38,6 +38,8 @@ data class ChatUi(
     val toast: String? = null,
     val socket: SocketState = SocketState.DISCONNECTED,
     val attaching: Boolean = false,
+    /** True for the bot's ongoing conversation, the one its inbox row stands for. */
+    val isMain: Boolean = false,
 )
 
 @HiltViewModel
@@ -54,6 +56,9 @@ class ChatViewModel @Inject constructor(
     private var profile: String = "default"
     private var mainConversation = false
     private var opening = false
+    private var draftKey: String = ""
+    /** True when this screen shows the bot's ongoing conversation, the one the inbox row stands for. */
+    private var isMain = false
 
     init {
         viewModelScope.launch { chat.socketState.collect { s -> _ui.update { it.copy(socket = s) } } }
@@ -64,6 +69,8 @@ class ChatViewModel @Inject constructor(
         opening = true
         this.mainConversation = mainConversation
         this.profile = profile
+        draftKey = "$profile:" + (sessionId ?: if (mainConversation) "main" else "new")
+        _ui.update { it.copy(input = chat.drafts[draftKey] ?: "") }
         viewModelScope.launch {
             _ui.update { it.copy(connecting = true, error = null) }
             try {
@@ -74,8 +81,18 @@ class ChatViewModel @Inject constructor(
                     chat.resumeSession(target, profile)
                 }
                 _ui.update { it.copy(liveId = live, connecting = false) }
+                isMain = mainConversation || chat.state(live)?.value?.title == ChatRepository.MAIN_CHAT_TITLE
+                _ui.update { it.copy(isMain = isMain) }
+                markRead()
                 stateJob?.cancel()
-                stateJob = viewModelScope.launch { chat.state(live)?.collect { s -> _ui.update { it.copy(session = s, liveId = s.liveId) } } }
+                stateJob = viewModelScope.launch {
+                    chat.state(live)?.collect { s ->
+                        val wasBusy = _ui.value.session?.isBusy == true
+                        if (!isMain && s.title == ChatRepository.MAIN_CHAT_TITLE) { isMain = true; _ui.update { it.copy(isMain = true) } }
+                        _ui.update { it.copy(session = s, liveId = s.liveId) }
+                        if (wasBusy && !s.isBusy) markRead()
+                    }
+                }
             } catch (e: Exception) {
                 _ui.update { it.copy(connecting = false, error = e.message ?: "Could not open chat") }
             } finally {
@@ -84,15 +101,34 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /** Called when the screen leaves: whatever the bot said while it was open has been read. */
+    fun leave() = markRead(detached = true)
+
+    /**
+     * Move Hermes' read watermark for the ongoing conversation to now. Server-side, so the inbox
+     * here and on the desktop agree. Task chats are not tracked.
+     */
+    private fun markRead(detached: Boolean = false) {
+        if (!isMain) return
+        val stored = _ui.value.session?.storedId ?: chat.state(_ui.value.liveId ?: return)?.value?.storedId ?: return
+        // On leave the viewModelScope may already be cancelled; the last write must outlive the screen.
+        val scope = if (detached) kotlinx.coroutines.CoroutineScope(Dispatchers.IO) else viewModelScope
+        scope.launch { runCatching { api.patchSession(profile.takeIf { it != "default" }, stored, unread = false) } }
+    }
+
     fun retry(sessionId: String?) { _ui.update { it.copy(liveId = null) }; open(sessionId, profile, mainConversation) }
 
-    fun setInput(v: String) = _ui.update { it.copy(input = v) }
+    fun setInput(v: String) {
+        _ui.update { it.copy(input = v) }
+        if (v.isBlank()) chat.drafts.remove(draftKey) else chat.drafts[draftKey] = v
+    }
 
     fun send() {
         val text = _ui.value.input.trim()
         val live = _ui.value.liveId ?: return
         if (text.isEmpty() && _ui.value.session?.attachments.isNullOrEmpty()) return
         _ui.update { it.copy(input = "") }
+        chat.drafts.remove(draftKey)
         viewModelScope.launch {
             try { chat.send(live, text.ifEmpty { "(see attached image)" }) } catch (e: Exception) { toast(e.message ?: "Send failed") }
         }

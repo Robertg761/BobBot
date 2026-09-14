@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -118,6 +119,39 @@ fun BotAvatar(name: String, size: Dp = 36.dp, modifier: Modifier = Modifier, col
             fontWeight = FontWeight.Bold,
             style = if (size >= 44.dp) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelMedium,
         )
+    }
+}
+
+/** A bot avatar with a presence dot: nothing when idle, amber pulse while working, rose when it needs you. */
+@Composable
+fun PresenceAvatar(name: String, presence: com.bobbot.ui.inbox.Presence, size: Dp = 48.dp, modifier: Modifier = Modifier) {
+    Box(modifier.size(size)) {
+        BotAvatar(name, size)
+        if (presence != com.bobbot.ui.inbox.Presence.IDLE) {
+            val dot = if (presence == com.bobbot.ui.inbox.Presence.WAITING) BobColors.Rose else BobColors.Amber
+            Box(
+                Modifier.align(Alignment.BottomEnd).size(size / 3.2f).clip(CircleShape).background(BobColors.Bg),
+                contentAlignment = Alignment.Center,
+            ) { Box(Modifier.size(size / 4.5f).clip(CircleShape).background(dot)) }
+        }
+    }
+}
+
+/** Two overlapping avatars for a group conversation. */
+@Composable
+fun GroupAvatar(members: List<String>, size: Dp = 48.dp, modifier: Modifier = Modifier) {
+    val a = members.getOrNull(0) ?: "?"
+    val b = members.getOrNull(1)
+    Box(modifier.size(size)) {
+        if (b == null) {
+            BotAvatar(a, size)
+        } else {
+            val small = size * 0.68f
+            BotAvatar(b, small, modifier = Modifier.align(Alignment.TopEnd))
+            Box(Modifier.align(Alignment.BottomStart).size(small + 4.dp).clip(CircleShape).background(BobColors.Bg), contentAlignment = Alignment.Center) {
+                BotAvatar(a, small)
+            }
+        }
     }
 }
 

@@ -38,7 +38,7 @@ import com.bobbot.ui.theme.BobColors
 import com.mikepenz.markdown.m3.Markdown
 
 /**
- * Small building blocks shared by the board, relay and automations screens.
+ * Small building blocks shared by the board and automations screens.
  * Hand-rolled rather than pulled from experimental Material3 APIs so the surface stays stable.
  */
 

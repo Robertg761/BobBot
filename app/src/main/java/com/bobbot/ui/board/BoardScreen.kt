@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
@@ -112,7 +113,7 @@ private fun priorityColor(priority: String?): Color = when (priority?.lowercase(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BoardScreen(onOpenTeam: () -> Unit, onOpenRelay: () -> Unit, onChat: (profile: String) -> Unit) {
+fun BoardScreen(onBack: () -> Unit, onOpenTeam: () -> Unit, onOpenGroup: () -> Unit, onChat: (profile: String) -> Unit) {
     val vm: BoardViewModel = hiltViewModel()
     val ui by vm.ui.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -124,6 +125,7 @@ fun BoardScreen(onOpenTeam: () -> Unit, onOpenRelay: () -> Unit, onChat: (profil
         topBar = {
             TopAppBar(
                 title = { Text("Bot network") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") } },
                 actions = {
                     TextButton(onClick = onOpenTeam) { Text("Permissions") }
                     IconButton(onClick = { vm.refresh() }) {
@@ -154,7 +156,7 @@ fun BoardScreen(onOpenTeam: () -> Unit, onOpenRelay: () -> Unit, onChat: (profil
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 112.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item("hero") { RelayHeroCard(onOpenRelay) }
+            item("hero") { GroupHeroCard(onOpenGroup) }
 
             if (ui.available == false) {
                 item("unavailable") {
@@ -269,10 +271,10 @@ fun BoardScreen(onOpenTeam: () -> Unit, onOpenRelay: () -> Unit, onChat: (profil
 }
 
 @Composable
-private fun RelayHeroCard(onOpenRelay: () -> Unit) {
+private fun GroupHeroCard(onOpenGroup: () -> Unit) {
     BobCard(container = BobColors.SurfaceRaised, border = BobColors.Accent.copy(alpha = 0.28f)) {
         Text(
-            "Start a bot-to-bot conversation",
+            "Start a group chat",
             style = MaterialTheme.typography.titleMedium,
             color = BobColors.Text,
         )
@@ -284,13 +286,13 @@ private fun RelayHeroCard(onOpenRelay: () -> Unit) {
         )
         Spacer(Modifier.height(14.dp))
         Button(
-            onClick = onOpenRelay,
+            onClick = onOpenGroup,
             colors = ButtonDefaults.buttonColors(containerColor = BobColors.Accent, contentColor = BobColors.Bg),
             shape = MaterialTheme.shapes.small,
         ) {
             Icon(Icons.Outlined.Forum, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Open group chats")
+            Text("New group")
         }
     }
 }

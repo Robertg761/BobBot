@@ -237,13 +237,6 @@ fun SettingsScreen(
                     checked = state.watchCron,
                     onCheckedChange = { vm.setWatch(cron = it) },
                 )
-                HorizontalDivider(Modifier.padding(vertical = 8.dp), color = BobColors.OutlineSoft)
-                ToggleRow(
-                    title = "Relay conversations",
-                    subtitle = "Bot-to-bot chats you started from BobBot",
-                    checked = state.watchRelay,
-                    onCheckedChange = { vm.setWatch(relay = it) },
-                )
             }
 
             // ---------- ntfy ----------

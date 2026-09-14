@@ -38,7 +38,6 @@ data class NotificationPrefs(
     val ntfyToken: String = "",
     val watchBoard: Boolean = true,
     val watchCron: Boolean = true,
-    val watchRelay: Boolean = true,
 )
 
 @Singleton
@@ -57,10 +56,10 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
         val NTFY_TOKEN = stringPreferencesKey("ntfy_token")
         val WATCH_BOARD = booleanPreferencesKey("watch_board")
         val WATCH_CRON = booleanPreferencesKey("watch_cron")
-        val WATCH_RELAY = booleanPreferencesKey("watch_relay")
         val LAST_CRON_SEEN = stringPreferencesKey("last_cron_seen")
         val LAST_BOARD_CURSOR = longPreferencesKey("last_board_cursor")
         val NICKNAMES = stringPreferencesKey("bot_nicknames")
+        val SEEN = stringPreferencesKey("conversations_seen")
         val PKCE_VERIFIER = stringPreferencesKey("pkce_verifier")
         val PKCE_STATE = stringPreferencesKey("pkce_state")
     }
@@ -85,7 +84,6 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
             ntfyToken = p[K.NTFY_TOKEN] ?: "",
             watchBoard = p[K.WATCH_BOARD] ?: true,
             watchCron = p[K.WATCH_CRON] ?: true,
-            watchRelay = p[K.WATCH_RELAY] ?: true,
         )
     }
 
@@ -112,10 +110,9 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
     suspend fun setNtfy(server: String, topic: String, token: String) = context.dataStore.edit {
         it[K.NTFY_SERVER] = server.trimEnd('/'); it[K.NTFY_TOPIC] = topic.trim(); it[K.NTFY_TOKEN] = token.trim()
     }
-    suspend fun setWatch(board: Boolean? = null, cron: Boolean? = null, relay: Boolean? = null) = context.dataStore.edit {
+    suspend fun setWatch(board: Boolean? = null, cron: Boolean? = null) = context.dataStore.edit {
         board?.let { v -> it[K.WATCH_BOARD] = v }
         cron?.let { v -> it[K.WATCH_CRON] = v }
-        relay?.let { v -> it[K.WATCH_RELAY] = v }
     }
 
     val lastCronSeen: Flow<String> = context.dataStore.data.map { it[K.LAST_CRON_SEEN] ?: "" }
@@ -147,15 +144,19 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
         context.dataStore.edit { it[K.NICKNAMES] = map.entries.joinToString("\n") { (k, v) -> "$k=$v" } }
     }
 
-    private fun conversationKey(server: String, profile: String) =
-        stringPreferencesKey("main_chat:" + android.util.Base64.encodeToString(
-            "$server\n$profile".toByteArray(), android.util.Base64.NO_WRAP))
+    /** When each inbox conversation was last open, as "key=epochMillis" lines. */
+    val seen: Flow<Map<String, Long>> = context.dataStore.data.map { parseSeen(it[K.SEEN]) }
 
-    suspend fun mainConversation(server: String, profile: String): String? =
-        context.dataStore.data.first()[conversationKey(server, profile)]
+    suspend fun markSeen(key: String, at: Long = System.currentTimeMillis()) = context.dataStore.edit {
+        val map = parseSeen(it[K.SEEN]).toMutableMap()
+        map[key] = maxOf(at, map[key] ?: 0L)
+        it[K.SEEN] = map.entries.joinToString("\n") { (k, v) -> "$k=$v" }
+    }
 
-    suspend fun setMainConversation(server: String, profile: String, id: String) =
-        context.dataStore.edit { it[conversationKey(server, profile)] = id }
+    private fun parseSeen(raw: String?): Map<String, Long> = (raw ?: "").lineSequence()
+        .filter { it.contains('=') }
+        .mapNotNull { line -> line.substringAfterLast('=').toLongOrNull()?.let { line.substringBeforeLast('=') to it } }
+        .toMap()
 
     suspend fun resetAll() = context.dataStore.edit { it.clear() }
 }

@@ -23,9 +23,11 @@ object BobColors {
     val RoseSoft = Color(0xFF3B1D22)
     val Violet = Color(0xFFB794F6)
     val VioletSoft = Color(0xFF2B2140)
-    val UserBubble = Color(0xFF243059)
-    val BotBubble = Color(0xFF161A23)
-    val RelayBubble = Color(0xFF1C2433)
+
+    /** Messages-app bubbles: yours in blue, the bot's in grey. */
+    val UserBubble = Color(0xFF2F62F0)
+    val UserBubbleText = Color(0xFFFFFFFF)
+    val BotBubble = Color(0xFF23272F)
 }
 
 /** Deterministic accent for a bot name so each bot has a stable identity color. */

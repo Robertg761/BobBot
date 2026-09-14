@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -66,7 +67,9 @@ import com.bobbot.core.net.bool
 import com.bobbot.core.net.child
 import com.bobbot.core.net.obj
 import com.bobbot.core.net.str
+import com.bobbot.core.net.HermesApi
 import com.bobbot.data.model.Bot
+import com.bobbot.data.model.CronJob
 import com.bobbot.data.model.SessionSummary
 import com.bobbot.data.repo.BotsRepository
 import com.bobbot.data.repo.ModelCatalog
@@ -118,6 +121,7 @@ data class BotDetailUiState(
     val sessions: List<SessionSummary> = emptyList(),
     val sessionsLoading: Boolean = false,
     val sessionsError: String? = null,
+    val automations: List<CronJob> = emptyList(),
     val catalog: ModelCatalog? = null,
     val catalogLoading: Boolean = false,
     val applyingModel: Boolean = false,
@@ -159,6 +163,7 @@ private fun skillFrom(e: JsonElement, key: String?): SkillItem? {
 class BotDetailViewModel @Inject constructor(
     private val bots: BotsRepository,
     private val models: ModelsRepository,
+    private val api: HermesApi,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(BotDetailUiState())
@@ -197,7 +202,14 @@ class BotDetailViewModel @Inject constructor(
             loadSoul()
             loadSkills()
             loadSessions()
+            loadAutomations()
         }
+    }
+
+    /** This bot's routines: the cron jobs Hermes runs on its behalf. */
+    private suspend fun loadAutomations() {
+        val jobs = runCatching { api.cronJobs(name.takeIf { it != "default" }) }.getOrDefault(emptyList())
+        _ui.update { it.copy(automations = jobs.filter { j -> j.profile == name }) }
     }
 
     private suspend fun loadSoul() {
@@ -366,7 +378,9 @@ fun BotDetailScreen(
     name: String,
     onBack: () -> Unit,
     onChat: (profile: String) -> Unit,
+    onNewTaskChat: (profile: String) -> Unit,
     onOpenSession: (sessionId: String, profile: String) -> Unit,
+    onOpenAutomations: () -> Unit,
 ) {
     val vm: BotDetailViewModel = hiltViewModel()
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -535,15 +549,50 @@ fun BotDetailScreen(
                 }
             }
 
-            item(key = "chats-header") { SectionHeader("Recent chats") }
+            item(key = "automations-header") {
+                SectionHeader("Automations", trailing = {
+                    TextButton(onClick = onOpenAutomations, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text("Manage", color = BobColors.Accent) }
+                })
+            }
+            item(key = "automations") {
+                BobCard(padding = PaddingValues(vertical = 6.dp, horizontal = 4.dp)) {
+                    if (ui.automations.isEmpty()) {
+                        Text(
+                            "No automations. Bots reach out on their own through scheduled automations.",
+                            style = MaterialTheme.typography.bodySmall, color = BobColors.TextFaint,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                    } else {
+                        ui.automations.forEach { job ->
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Outlined.Schedule, null, tint = if (job.enabled) BobColors.Accent else BobColors.TextFaint, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(job.name, style = MaterialTheme.typography.bodyLarge, color = BobColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        listOf(job.scheduleDisplay, if (job.enabled) "active" else "paused").filter { it.isNotBlank() }.joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall, color = BobColors.TextFaint,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item(key = "chats-header") {
+                SectionHeader("Task chats", trailing = {
+                    TextButton(onClick = { onNewTaskChat(name) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text("New", color = BobColors.Accent) }
+                })
+            }
             if (ui.sessionsLoading && ui.sessions.isEmpty()) {
                 item(key = "chats-loading") { BobCard { LoadingRow("Loading chats…") } }
             } else if (ui.sessions.isEmpty()) {
                 item(key = "chats-empty") {
                     BobCard {
                         EmptyState(
-                            title = "No chats yet",
-                            subtitle = ui.sessionsError ?: "Start a conversation to see it here.",
+                            title = "No task chats",
+                            subtitle = ui.sessionsError ?: "Separate chats for one-off jobs, apart from the ongoing conversation.",
                             icon = Icons.Outlined.History,
                         )
                     }
@@ -688,7 +737,7 @@ private fun HeaderCard(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        name,
+                        botName(name),
                         style = MaterialTheme.typography.headlineSmall,
                         color = BobColors.Text,
                         maxLines = 1,

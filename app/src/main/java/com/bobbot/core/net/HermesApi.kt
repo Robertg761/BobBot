@@ -56,8 +56,12 @@ class HermesApi @Inject constructor(val http: HermesClient) {
         http.get("/api/sessions/search", mapOf("profile" to profile, "q" to q, "limit" to "$limit"))
     suspend fun sessionMessages(profile: String?, id: String, limit: Int = 500, offset: Int = 0): JsonElement =
         http.get("/api/sessions/$id/messages", mapOf("profile" to profile, "limit" to "$limit", "offset" to "$offset"))
-    suspend fun patchSession(profile: String?, id: String, title: String? = null, archived: Boolean? = null, pinned: Boolean? = null): JsonElement =
-        http.patch("/api/sessions/$id", jsonOf("title" to title, "archived" to archived, "pinned" to pinned, "profile" to profile), mapOf("profile" to profile))
+    /** `unread = false` moves the server's read watermark to now; `true` marks the chat unread. */
+    suspend fun patchSession(profile: String?, id: String, title: String? = null, archived: Boolean? = null, pinned: Boolean? = null, unread: Boolean? = null): JsonElement =
+        http.patch("/api/sessions/$id", jsonOf("title" to title, "archived" to archived, "pinned" to pinned, "unread" to unread, "profile" to profile), mapOf("profile" to profile))
+    /** The raw session row, including hidden ones: `pinned`, `last_read_at`, `last_activity_at`. */
+    suspend fun sessionDetail(profile: String?, id: String): JsonElement =
+        http.get("/api/sessions/$id", mapOf("profile" to profile))
     suspend fun deleteSession(profile: String?, id: String): JsonElement =
         http.delete("/api/sessions/$id", mapOf("profile" to profile))
     suspend fun latestDescendant(profile: String?, id: String): String =

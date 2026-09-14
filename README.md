@@ -6,15 +6,19 @@ Dark theme only. Kotlin, Jetpack Compose, Material 3.
 
 ## What it does
 
+BobBot is laid out like a messages app, in the spirit of xAI's Grok Bot: bots are the main objects, not chat sessions. You open the app and see one conversation per bot.
+
 - **First-run setup**: server address → sign in through the dashboard's native PKCE flow (system browser, no password typed in the app) → optional push notifications. Loopback-bound dashboards can use a static session token instead.
-- **Chats**: streaming replies over the dashboard's JSON-RPC WebSocket (`/api/ws`), markdown rendering, reasoning disclosure, tool-call cards, image attachments, tool-approval / clarify / sudo prompts, stop, rename, pin, archive, search across all bots.
-- **Model switching**: tap the model chip in any chat to switch that chat's model (or make it the bot's default). A Models screen manages the global default, auxiliary model slots, and shows the MoA preset.
-- **Bots**: tap a bot to open its ongoing direct conversation, with a separate settings button. Every Hermes profile is a bot. Create one in a 3-step wizard (identity + persona, model, review), edit its SOUL.md persona, description, model, and skills. A "Grok bot" is just a bot whose model is a Grok model on the xAI provider.
-- **Bot network**: the kanban board is Hermes' bot-to-bot bus. The Network tab renders every task hand-off and comment as "**Bot A → Bot B**" with both avatars, so it is always clear when bots talk to each other. You can also ask a bot to do something on another bot's behalf.
-- **Group conversations**: choose two to six bots. Hermes hosts the conversation, keeps its history, and continues accepted work when the phone disconnects. Includes interjections, stop, retry and tool approval controls.
+- **Messages (home)**: every bot is one row with its avatar, name, last message and time, plus group conversations in the same list. Rows sort pinned-first, then by activity. A dot on the avatar shows a bot that is working (amber, including server-side workers) or waiting on you (red); a bold row with a blue dot means it has activity you have not read. Tap a row to continue that bot's ongoing conversation. Long-press for pin, bot profile, or a separate task chat. Search covers bot names and every past chat.
+- **One conversation per bot, shared with Hermes**: a bot's ongoing conversation is Hermes' own canonical "Bot Chat" for that profile, the same hidden session the Hermes desktop app and `bot-chat:` cron delivery use. Read state is Hermes' per-session watermark, so opening a chat on the phone clears it on the desktop too. Nothing about which chat is "the" chat lives on the phone.
+- **+ button**: new bot (3-step wizard: identity + persona, model, review) or new group (two to six bots). The ⋮ menu holds Bot network, Automations and Settings.
+- **Chat**: iMessage-style bubbles, streaming replies with a typing indicator, markdown, a collapsible thought process, tool calls as quiet activity lines, image attachments, and approval / clarify / sudo prompts that arrive inline in the transcript. Drafts survive leaving the chat. Tap the header for the bot's profile; the ⋮ menu switches the model or reasoning effort for this chat, starts a task chat, or renames a task chat.
+- **Bot profile**: persona (SOUL.md), description, model, skills, this bot's automations, task chats (one-off jobs kept apart from the ongoing conversation; older BobBot direct chats from before 1.2.0 appear here), rename / display name, delete. Every Hermes profile is a bot. A "Grok bot" is just a bot whose model is a Grok model on the xAI provider.
+- **Groups**: choose two to six bots. Hermes hosts the conversation, keeps its history, and continues accepted work when the phone disconnects. Messages show each bot's avatar and name; approval and retry requests arrive as cards; stop from the header.
+- **Bot network**: the kanban board is Hermes' bot-to-bot bus. It renders every task hand-off and comment as "**Bot A → Bot B**" with both avatars, so it is always clear when bots talk to each other. You can also ask a bot to do something on another bot's behalf.
 - **Automations**: Hermes cron jobs, which are how bots reach out proactively. Create, edit, pause, run now, inspect runs. Deliver to `ntfy` to get a push on this phone.
-- **Notifications**: a foreground "link" service subscribes to a private ntfy topic (which setup registers with Hermes' ntfy channel), watches automations and the board, and posts a notification when a reply finishes while the app is in the background.
-- **Settings / System**: connection, identity, notification toggles, ntfy config with a test button, server status, host stats, usage, gateway restart, logs.
+- **Notifications**: a foreground "link" service subscribes to a private ntfy topic (which setup registers with Hermes' ntfy channel), watches automations and the board, and posts a notification when a reply finishes while the app is in the background. Tapping it opens that conversation.
+- **Settings / System**: connection, identity, notification toggles, ntfy config with a test button, server status, host stats, usage, gateway restart, logs, models (global default, auxiliary slots, MoA preset).
 
 ## Requirements on the computer
 
@@ -51,7 +55,7 @@ data/model   Bot, SessionSummary, ModelProvider, CronJob, BoardTask, …
 data/repo    ChatRepository (event stream → per-session state), Bots/Models/Automations/Board/Relay/System repositories
 data/prefs   DataStore-backed settings
 service      LinkService (foreground: ntfy stream + board/cron watchers + background completions), Notifier, BootReceiver
-ui           setup, sessions, chat, bots, models, board, relay, automations, settings, system
+ui           setup, inbox (home), chat, groups, bots, models, board, team, automations, settings, system
 ```
 
 Notes on the protocol that shaped the design:
@@ -60,6 +64,7 @@ Notes on the protocol that shaped the design:
 - `session_id` from `session.create` is an ephemeral live handle; `stored_session_id` is the durable id used for resume and for the Chats list.
 - `thinking.delta` is a spinner label, not reasoning; `reasoning.delta` is the real thing.
 - Group conversations use the native `groups.*` RPC methods. Kanban handles persistent assignments and task reviews.
+- The inbox is `profiles.list` with `include_sessions`: each profile row carries `canonical_session` (the Bot Chat: id, live compression tip, preview, activity) and `worker_session` (the newest kanban / sub-agent worker, heartbeating while it runs). `GET /api/sessions/{id}` adds `last_read_at` and `pinned`; `PATCH /api/sessions/{id}` with `unread: false` marks read. The chat itself opens through `session.list` with `title: "Bot Chat"` (exact-title lookup that includes hidden rows) and, when absent, `session.create` with `title: "Bot Chat"` and `hidden: true`.
 - Proactive pushes use automations and the `cronjob` tool's delivery routing to the configured ntfy topic.
 
 ## Clove and the team

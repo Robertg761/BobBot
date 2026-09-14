@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
@@ -104,7 +105,7 @@ private fun statusColor(status: String?): Color = when (status?.lowercase()) {
 /** Automations are Hermes cron jobs: the way a bot starts a conversation instead of waiting for one. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AutomationsScreen(onChat: (profile: String) -> Unit) {
+fun AutomationsScreen(onBack: () -> Unit, onChat: (profile: String) -> Unit) {
     val vm: AutomationsViewModel = hiltViewModel()
     val ui by vm.ui.collectAsStateWithLifecycle()
 
@@ -119,6 +120,7 @@ fun AutomationsScreen(onChat: (profile: String) -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("Automations") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") } },
                 actions = {
                     IconButton(onClick = { vm.refresh() }) {
                         if (ui.refreshing) {

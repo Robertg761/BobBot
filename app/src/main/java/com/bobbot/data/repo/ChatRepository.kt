@@ -3,7 +3,6 @@ package com.bobbot.data.repo
 import android.util.Log
 import com.bobbot.core.net.GatewayEvent
 import com.bobbot.core.net.GatewaySocket
-import com.bobbot.core.net.HermesApi
 import com.bobbot.core.net.RpcException
 import com.bobbot.core.net.asString
 import com.bobbot.core.net.bool
@@ -18,10 +17,15 @@ import com.bobbot.core.net.str
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
@@ -33,7 +37,7 @@ import javax.inject.Singleton
 sealed interface ChatItem {
     val id: String
 
-    data class User(override val id: String, val text: String, val images: List<String> = emptyList(), val fromBot: String? = null) : ChatItem
+    data class User(override val id: String, val text: String, val images: List<String> = emptyList()) : ChatItem
     data class Assistant(
         override val id: String,
         val text: String,
@@ -102,14 +106,24 @@ data class ChatSessionState(
 data class CompletionNotice(val liveId: String, val storedId: String?, val profile: String, val title: String, val preview: String, val status: String)
 
 @Singleton
-class ChatRepository @Inject constructor(
-    private val socket: GatewaySocket,
-    private val api: HermesApi,
-    private val prefs: com.bobbot.data.prefs.AppPrefs,
-) {
+class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val sessions = ConcurrentHashMap<String, MutableStateFlow<ChatSessionState>>()
     private val storedToLive = ConcurrentHashMap<String, String>()
+
+    /** Live ids currently held in memory; drives [liveStates] for the inbox. */
+    private val roster = MutableStateFlow<Set<String>>(emptySet())
+    private fun syncRoster() { roster.value = sessions.keys.toSet() }
+
+    /** Every open session's state, as one list, so the inbox can show who is working. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val liveStates: Flow<List<ChatSessionState>> = roster.flatMapLatest { ids ->
+        val flows = ids.mapNotNull { sessions[it] }
+        if (flows.isEmpty()) flowOf(emptyList()) else combine(flows) { it.toList() }
+    }
+
+    /** Unsent composer text per conversation, kept while the app runs. */
+    val drafts = ConcurrentHashMap<String, String>()
 
     /** Live id of the session that most recently emitted message.start. Unscoped events go here. */
     @Volatile private var focusedLive: String? = null
@@ -136,24 +150,33 @@ class ChatRepository @Inject constructor(
 
     private val mainConversations = MainConversationResolver()
 
-    /** A bot's direct conversation is distinct from relay and task sessions. */
-    suspend fun openMainConversation(profile: String): String {
-        val server = prefs.current().baseUrl
-        return mainConversations.open(
-            saved = { prefs.mainConversation(server, profile) },
-            live = { id -> storedToLive[id]?.takeIf { sessions.containsKey(it) } },
-            latest = { id ->
-                try { api.latestDescendant(profile, id) }
-                catch (e: com.bobbot.core.net.HermesHttpException) { if (e.code == 404) null else throw e }
-            },
-            resume = { resumeSession(it, profile) },
-            create = { val live = createSession(profile); live to (sessions[live]?.value?.storedId ?: "") },
-            save = { prefs.setMainConversation(server, profile, it) },
-        )
+    /**
+     * A bot's ongoing conversation is Hermes' canonical "Bot Chat": one hidden session per profile,
+     * found by its exact title, shared with the Hermes desktop app and with cron `bot-chat:` delivery.
+     * Task chats are ordinary sessions and stay separate.
+     */
+    suspend fun openMainConversation(profile: String): String = mainConversations.open(
+        saved = { findMainConversation(profile) },
+        live = { id -> storedToLive[id]?.takeIf { sessions.containsKey(it) } },
+        latest = { id -> id },
+        resume = { resumeSession(it, profile) },
+        create = { val live = createSession(profile, title = MAIN_CHAT_TITLE, hidden = true); live to (sessions[live]?.value?.storedId ?: "") },
+        save = { },
+    )
+
+    /** The stored id of the profile's Bot Chat (its live compression tip), or null when there is none yet. */
+    suspend fun findMainConversation(profile: String): String? {
+        socket.ensureConnected()
+        val r = socket.call("session.list", jsonOf("profile" to profile.takeIf { it.isNotBlank() && it != "default" }, "title" to MAIN_CHAT_TITLE))
+        val row = r.list("sessions").firstOrNull() ?: return null
+        return row.str("resolved_id") ?: row.str("id")
     }
 
     /** Create a fresh session for a bot. Returns the live id. */
-    suspend fun createSession(profile: String, model: String? = null, provider: String? = null, closeOnDisconnect: Boolean = false): String {
+    suspend fun createSession(
+        profile: String, model: String? = null, provider: String? = null, closeOnDisconnect: Boolean = false,
+        title: String? = null, hidden: Boolean = false,
+    ): String {
         socket.ensureConnected()
         val r = socket.call(
             "session.create",
@@ -162,11 +185,14 @@ class ChatRepository @Inject constructor(
                 "profile" to profile.takeIf { it.isNotBlank() && it != "default" },
                 "model" to model, "provider" to provider,
                 "close_on_disconnect" to closeOnDisconnect,
+                "title" to title,
+                "hidden" to hidden.takeIf { it },
             ),
         )
         val live = r.str("session_id") ?: throw IllegalStateException("session.create returned no id")
         val st = MutableStateFlow(ChatSessionState(liveId = live, profile = profile, loading = false))
         sessions[live] = st
+        syncRoster()
         applyInfo(live, r.child("info"))
         st.update { it.copy(storedId = r.str("stored_session_id"), loading = false) }
         r.str("stored_session_id")?.let { storedToLive[it] = live }
@@ -204,6 +230,7 @@ class ChatRepository @Inject constructor(
             }
         }
         storedToLive[st.value.storedId ?: storedId] = live
+        syncRoster()
         return live
     }
 
@@ -224,9 +251,9 @@ class ChatRepository @Inject constructor(
         }
     }
 
-    suspend fun send(liveId: String, text: String, fromBot: String? = null) {
+    suspend fun send(liveId: String, text: String) {
         val st = sessions[liveId] ?: throw IllegalStateException("unknown session")
-        st.update { it.copy(items = it.items + ChatItem.User(newId(), text, images = it.attachments, fromBot = fromBot), attachments = emptyList(), error = null, status = "working") }
+        st.update { it.copy(items = it.items + ChatItem.User(newId(), text, images = it.attachments), attachments = emptyList(), error = null, status = "working") }
         try {
             socket.call("prompt.submit", jsonOf("session_id" to liveId, "text" to text))
         } catch (e: RpcException) {
@@ -282,9 +309,10 @@ class ChatRepository @Inject constructor(
     suspend fun close(liveId: String) {
         runCatching { socket.call("session.close", jsonOf("session_id" to liveId)) }
         sessions.remove(liveId)?.value?.storedId?.let { storedToLive.remove(it) }
+        syncRoster()
     }
 
-    fun forget(liveId: String) { sessions.remove(liveId)?.value?.storedId?.let { storedToLive.remove(it) } }
+    fun forget(liveId: String) { sessions.remove(liveId)?.value?.storedId?.let { storedToLive.remove(it) }; syncRoster() }
 
     // ---- reconnect ----
     private suspend fun onReconnected() {
@@ -297,6 +325,7 @@ class ChatRepository @Inject constructor(
                     val flow = sessions.remove(s.liveId) ?: continue
                     flow.update { it.copy(liveId = newLive) }
                     sessions[newLive] = flow
+                    syncRoster()
                 }
                 storedToLive[s.storedId!!] = newLive
                 sessions[newLive]?.update { it.copy(status = r.str("status") ?: "idle", error = null) }
@@ -473,4 +502,9 @@ class ChatRepository @Inject constructor(
     }
 
     private fun newId() = UUID.randomUUID().toString()
+
+    companion object {
+        /** Hermes' registry title for a profile's canonical conversation. */
+        const val MAIN_CHAT_TITLE = "Bot Chat"
+    }
 }

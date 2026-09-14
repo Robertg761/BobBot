@@ -50,6 +50,8 @@ data class SessionSummary(
     val pinned: Boolean,
     val profile: String,
     val isActive: Boolean,
+    /** Server read state; null when the server does not report it. */
+    val unread: Boolean? = null,
 ) {
     companion object {
         fun from(j: JsonElement): SessionSummary = SessionSummary(
@@ -65,6 +67,7 @@ data class SessionSummary(
             pinned = j.bool("pinned") ?: false,
             profile = j.str("profile") ?: "default",
             isActive = j.bool("is_active") ?: false,
+            unread = j.bool("unread"),
         )
     }
 }
