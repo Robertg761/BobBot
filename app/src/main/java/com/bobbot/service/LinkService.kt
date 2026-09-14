@@ -215,6 +215,7 @@ class LinkService : Service() {
             val id = r.str("id") ?: continue
             if (id in notified) continue
             notifier.decisionNeeded(
+                id = id,
                 profile = r.str("profile") ?: "a bot",
                 tool = r.str("tool") ?: "a tool",
                 reason = r.str("reason") ?: "",
@@ -247,7 +248,12 @@ class LinkService : Service() {
     private suspend fun gatewayKeeper() = resilient("gateway") { _ ->
         chat.connect()
         // Display names (persona headings) are loaded by the app; the service may be the first thing running after a reboot.
-        if (BotNamesLoaded.compareAndSet(false, true)) runCatching { bots.refresh() }.onFailure { BotNamesLoaded.set(false) }
+        if (BotNamesLoaded.compareAndSet(false, true)) {
+            runCatching { bots.refresh() }
+                .onFailure { BotNamesLoaded.set(false) }
+                // The roster is also the conversation-shortcut list.
+                .onSuccess { list -> Shortcuts.publish(this@LinkService, list.map { it.name }) }
+        }
         status.value = "Connected to Hermes · watching for bot messages"
         delay(30_000)
         0L // healthy: no extra backoff

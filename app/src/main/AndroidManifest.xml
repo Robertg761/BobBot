@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Samsung One UI sleeps background apps; without an exemption the link dies silently. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <queries>
         <intent>
@@ -29,6 +31,9 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:allowEmbedded="true"
+            android:documentLaunchMode="always"
+            android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.BobBot.Splash">
             <intent-filter>
@@ -65,6 +70,11 @@
 
         <receiver
             android:name=".service.ReplyReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
+            android:name=".service.DecisionReceiver"
             android:enabled="true"
             android:exported="false" />
 

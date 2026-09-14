@@ -221,6 +221,12 @@ fun SettingsScreen(
                         linkRunning = !linkRunning
                     }) { Text(if (linkRunning) "Stop" else "Start") }
                 }
+                HorizontalDivider(Modifier.padding(vertical = 10.dp), color = BobColors.OutlineSoft)
+                BatteryOptimisationRow()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp), color = BobColors.OutlineSoft)
+                    HideLinkNotificationRow()
+                }
             }
 
             BobCard {
@@ -429,6 +435,45 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheck
                 uncheckedTrackColor = BobColors.SurfaceHigh,
             ),
         )
+    }
+}
+
+/**
+ * Android 13 let users switch off a foreground service's notification. Point them at the channel
+ * rather than hiding it ourselves: the service keeps running either way.
+ */
+@Composable
+private fun HideLinkNotificationRow() {
+    val ctx = LocalContext.current
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Hide the link notification", color = BobColors.Text, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "Android 13 and later lets you switch this notification off; BobBot keeps listening.",
+                color = BobColors.TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        TextButton(onClick = { openLinkChannelSettings(ctx) }) { Text("Open notification settings") }
+    }
+}
+
+private fun openLinkChannelSettings(ctx: android.content.Context) {
+    val channel = android.content.Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+        .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, com.bobbot.service.Notifier.CH_LINK)
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        ctx.startActivity(channel)
+    } catch (e: Exception) {
+        runCatching {
+            ctx.startActivity(
+                android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
     }
 }
 

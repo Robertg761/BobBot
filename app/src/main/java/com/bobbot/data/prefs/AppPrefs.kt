@@ -69,6 +69,7 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
         val SEEN = stringPreferencesKey("conversations_seen")
         val PKCE_VERIFIER = stringPreferencesKey("pkce_verifier")
         val PKCE_STATE = stringPreferencesKey("pkce_state")
+        val BATTERY_PROMPT = booleanPreferencesKey("battery_prompt_shown")
     }
 
     val connection: Flow<ConnectionPrefs> = context.dataStore.data.map { p ->
@@ -130,6 +131,23 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
         val ids = ((it[K.NOTIFIED_DECISIONS] ?: "").split(',').filter { s -> s.isNotBlank() } + id).takeLast(200)
         it[K.NOTIFIED_DECISIONS] = ids.joinToString(",")
     }
+
+    /**
+     * One-time nudge to exempt BobBot from battery optimisation. One UI and other aggressive
+     * launchers put sleeping apps to sleep, which kills the background link without a word.
+     */
+    val batteryPromptShown: Flow<Boolean> = context.dataStore.data.map { it[K.BATTERY_PROMPT] ?: false }
+    suspend fun markBatteryPromptShown() = context.dataStore.edit { it[K.BATTERY_PROMPT] = true }
+
+    /** Ask only while it would change something: notifications on, not exempt, never asked. */
+    suspend fun shouldShowBatteryPrompt(): Boolean =
+        currentNotifications().enabled && !isIgnoringBatteryOptimizations() && !batteryPromptShown.first()
+
+    /** Defaults to exempt when the check is unavailable, so a broken read never nags. */
+    fun isIgnoringBatteryOptimizations(): Boolean = runCatching {
+        (context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager)
+            .isIgnoringBatteryOptimizations(context.packageName)
+    }.getOrDefault(true)
 
     val lastCronSeen: Flow<String> = context.dataStore.data.map { it[K.LAST_CRON_SEEN] ?: "" }
     suspend fun setLastCronSeen(v: String) = context.dataStore.edit { it[K.LAST_CRON_SEEN] = v }
