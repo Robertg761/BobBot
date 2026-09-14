@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.5] - 2026-09-14
+
+### Fixed
+- The expanded bot-message notification is headed with the bot's name. Android showed the app name there for a one-to-one thread; the conversation is now always titled with the bot (or "bot · task chat").
+
 ## [1.3.4] - 2026-09-14
 
 Everything in this release comes out of a deep audit of the app and the team extension, run part by part (inbox and groups, chat and streaming, background link and notifications, the Hermes plugin).

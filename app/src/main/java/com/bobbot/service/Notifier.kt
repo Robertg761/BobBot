@@ -94,7 +94,9 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             }.toList()
         }
         messages.forEach { style.addMessage(it) }
-        if (title.isNotBlank() && title != bot) style.setConversationTitle(title)
+        // Always titled: for a one-to-one thread Android would otherwise head the expanded card with the app name.
+        style.setConversationTitle(title.ifBlank { bot })
+        style.setGroupConversation(false)
         val n = base(CH_BOTS)
             .setStyle(style)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
