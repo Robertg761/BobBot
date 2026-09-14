@@ -127,6 +127,7 @@ fun NewGroupScreen(onBack: () -> Unit, onCreated: (roomId: String) -> Unit) {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it }, singleLine = true, colors = fieldColors(), shape = RoundedCornerShape(14.dp),
                     placeholder = { Text("Group name (optional)") }, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences),
                 )
                 Spacer(Modifier.height(12.dp))
                 Text("Choose two to six bots. They share this conversation and can hand work to each other.", style = MaterialTheme.typography.bodySmall, color = BobColors.TextMuted)

@@ -736,7 +736,7 @@ fun BotDetailScreen(
                 Column {
                     Text("One line the other bots see when choosing whom to message, e.g. \"Research and web digging\".", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(value = value, onValueChange = { value = it }, singleLine = true, label = { Text("Role") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = value, onValueChange = { value = it }, singleLine = true, label = { Text("Role") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences))
                 }
             },
             confirmButton = { TextButton(onClick = { editingRole = false; vm.setRole(value) }, enabled = value.isNotBlank()) { Text("Save") } },
@@ -841,6 +841,7 @@ private fun HeaderCard(
                 label = { Text("Description") },
                 shape = RoundedCornerShape(14.dp),
                 minLines = 2,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences),
             )
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -905,6 +906,7 @@ private fun PersonaCard(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp),
                 placeholder = { Text("Who is this bot? Tone, priorities, boundaries…", color = BobColors.TextFaint) },
                 shape = RoundedCornerShape(14.dp),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences),
                 textStyle = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(10.dp))

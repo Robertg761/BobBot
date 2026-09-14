@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2] - 2026-09-14
+
+### Fixed
+- The keyboard capitalises sentences in chats, group chats, and the description, persona, role and group-name fields. The message box gave the keyboard no hint before, so it stayed lowercase.
+- The send and stop buttons sit inside the message bar with room around them instead of being jammed into its edge.
+- Bot bubbles hug their text like your own do, instead of always stretching to the maximum width.
+
 ## [1.3.1] - 2026-09-14
 
 ### Changed

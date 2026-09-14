@@ -148,6 +148,8 @@ fun MarkdownBody(text: String, color: Color = BobColors.Text) {
         content = text,
         colors = markdownColor(text = color, codeBackground = BobColors.Bg.copy(alpha = 0.6f), inlineCodeBackground = BobColors.Bg.copy(alpha = 0.6f)),
         typography = markdownTypography(),
+        // Hug the text: the renderer fills its width by default, which stretched every bot bubble to the maximum.
+        modifier = Modifier.width(androidx.compose.foundation.layout.IntrinsicSize.Max),
     )
 }
 

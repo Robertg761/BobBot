@@ -414,6 +414,7 @@ private fun LazyListScope.identityStep(ui: NewBotUiState, vm: NewBotViewModel) {
                 label = { Text("Description") },
                 placeholder = { Text("One line about what it is for") },
                 shape = RoundedCornerShape(14.dp),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences),
                 minLines = 2,
             )
         }
@@ -446,6 +447,7 @@ private fun LazyListScope.identityStep(ui: NewBotUiState, vm: NewBotViewModel) {
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = ui.soul,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences),
                 onValueChange = vm::setSoul,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp),
                 placeholder = { Text("Tone, priorities, boundaries…", color = BobColors.TextFaint) },

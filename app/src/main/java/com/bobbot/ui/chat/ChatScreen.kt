@@ -445,12 +445,18 @@ internal fun Composer(
                 }
             }
             Row(
-                Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).background(BobColors.SurfaceRaised).padding(start = 6.dp, end = 4.dp, top = 3.dp, bottom = 3.dp),
+                Modifier.weight(1f).clip(RoundedCornerShape(26.dp)).background(BobColors.SurfaceRaised).padding(start = 6.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
                 OutlinedTextField(
                     value = input, onValueChange = onInput, enabled = enabled,
                     placeholder = { Text(if (enabled) placeholder else "Connecting…", color = BobColors.TextFaint) },
+                    // Sentence capitalisation and a plain text keyboard: without this the keyboard gets no hint and stays lowercase.
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Text,
+                        autoCorrectEnabled = true,
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent, disabledBorderColor = Color.Transparent,
                         cursorColor = BobColors.Accent, focusedTextColor = BobColors.Text, unfocusedTextColor = BobColors.Text, disabledTextColor = BobColors.TextMuted,
@@ -459,14 +465,15 @@ internal fun Composer(
                     maxLines = 6,
                     modifier = Modifier.weight(1f),
                 )
+                Spacer(Modifier.width(6.dp))
                 if (busy) {
-                    FilledIconButton(onClick = onStop, colors = IconButtonDefaults.filledIconButtonColors(containerColor = BobColors.RoseSoft, contentColor = BobColors.Rose), modifier = Modifier.padding(bottom = 4.dp).size(38.dp)) { Icon(Icons.Outlined.Stop, "Stop") }
+                    FilledIconButton(onClick = onStop, colors = IconButtonDefaults.filledIconButtonColors(containerColor = BobColors.RoseSoft, contentColor = BobColors.Rose), modifier = Modifier.padding(bottom = 6.dp).size(44.dp)) { Icon(Icons.Outlined.Stop, "Stop") }
                 } else {
                     val canSend = enabled && (input.isNotBlank() || attachments.isNotEmpty())
                     FilledIconButton(
                         onClick = onSend, enabled = canSend,
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = BobColors.UserBubble, contentColor = BobColors.UserBubbleText, disabledContainerColor = BobColors.SurfaceHigh, disabledContentColor = BobColors.TextFaint),
-                        modifier = Modifier.padding(bottom = 4.dp).size(38.dp),
+                        modifier = Modifier.padding(bottom = 6.dp).size(44.dp),
                     ) { Icon(Icons.Rounded.ArrowUpward, "Send") }
                 }
             }
