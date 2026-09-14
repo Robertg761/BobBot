@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.1] - 2026-09-14
+
+### Changed
+- **New app icon**: two chat bubbles with a typing indicator, on the app's dark palette. Replaces the robot face. Includes a themed (monochrome) icon for Android 13+ launchers and a matching notification glyph.
+
 ## [1.0.0] - 2026-09-13
 
 ### Added
