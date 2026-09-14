@@ -16,6 +16,8 @@ import com.bobbot.data.repo.GroupRoom
 import com.bobbot.data.repo.GroupsRepository
 import com.bobbot.data.repo.RosterEntry
 import com.bobbot.data.repo.RosterRepository
+import com.bobbot.data.repo.TeamRepository
+import com.bobbot.data.repo.TeamState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -53,6 +55,7 @@ private data class Inputs(
     val rooms: List<GroupRoom>,
     val live: List<ChatSessionState>,
     val seen: Map<String, Long>,
+    val team: TeamState?,
 )
 
 @HiltViewModel
@@ -63,6 +66,7 @@ class InboxViewModel @Inject constructor(
     private val roster: RosterRepository,
     private val groups: GroupsRepository,
     private val prefs: AppPrefs,
+    private val team: TeamRepository,
 ) : ViewModel() {
     private val _ui = MutableStateFlow(InboxUi())
     val ui: StateFlow<InboxUi> = _ui
@@ -74,7 +78,8 @@ class InboxViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            combine(bots.bots, rosterRows, rooms, chat.liveStates, prefs.seen) { b, r, rm, l, s -> Inputs(b, r, rm, l, s) }
+            combine(bots.bots, rosterRows, rooms, chat.liveStates, prefs.seen) { b, r, rm, l, s -> Inputs(b, r, rm, l, s, null) }
+                .combine(team.state) { i, t -> i.copy(team = t) }
                 .combine(BotNames.names) { i, names ->
                     buildInbox(
                         bots = i.bots,
@@ -84,6 +89,7 @@ class InboxViewModel @Inject constructor(
                         rooms = i.rooms,
                         seen = i.seen,
                         nameOf = { p -> names[p]?.takeIf { it.isNotBlank() } ?: BotNames.fallback(p) },
+                        needsYou = i.team?.needingYou?.map { it.profile }?.toSet() ?: emptySet(),
                     )
                 }
                 .collect { rows -> _ui.update { it.copy(rows = rows, bots = bots.bots.value) } }
@@ -113,6 +119,7 @@ class InboxViewModel @Inject constructor(
                 val botList = bots.refresh()
                 val rows = roster.roster()
                 rosterRows.value = rows
+                runCatching { team.refresh() }
                 _ui.update { it.copy(loading = false, error = null, bots = botList, teammateMessaging = rows.any { r -> r.teammateMessaging }) }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e

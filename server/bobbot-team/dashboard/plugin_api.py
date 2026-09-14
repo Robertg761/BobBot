@@ -39,13 +39,15 @@ def set_team(body: Settings):
 
 class Decision(BaseModel):
     choice: str
-    reason: str
+    reason: str = ''
+    scope: str = 'exact'
 
 
 @router.post('/requests/{ident}/decide')
 def decide(ident: str, body: Decision):
     try:
-        row = team.store().decide(ident, body.choice, body.reason, 'you', human=True)
+        reason = body.reason.strip() or ('Allowed by Robert in BobBot' if body.choice == 'approved' else 'Denied by Robert in BobBot')
+        row = team.store().decide(ident, body.choice, reason, 'you', human=True, scope=body.scope)
         team.wake_request(row)
         return row
     except (ValueError, PermissionError) as exc:

@@ -58,6 +58,8 @@ fun buildInbox(
     rooms: List<GroupRoom>,
     seen: Map<String, Long>,
     nameOf: (String) -> String,
+    /** Profiles with a team permission request escalated to you. */
+    needsYou: Set<String> = emptySet(),
 ): List<InboxRow> {
     val liveByProfile = live.groupBy { it.profile }
     val botRows = bots.map { bot ->
@@ -65,12 +67,13 @@ fun buildInbox(
         val anyLive = liveByProfile[bot.name].orEmpty()
         val liveMain = anyLive.firstOrNull { it.storedId != null && (it.storedId == chat?.resolvedId || it.storedId == chat?.id) }
         val presence = when {
-            anyLive.any { it.status == "waiting" } -> Presence.WAITING
+            anyLive.any { it.status == "waiting" } || bot.name in needsYou -> Presence.WAITING
             anyLive.any { it.isBusy } || bot.name in working -> Presence.WORKING
             else -> Presence.IDLE
         }
         val name = nameOf(bot.name)
-        val preview = liveMain?.let { livePreview(it) }
+        val preview = (if (bot.name in needsYou) "Needs your decision" else null)
+            ?: liveMain?.let { livePreview(it) }
             ?: chat?.preview?.takeIf { it.isNotBlank() }?.let { flatten(it) }
             ?: bot.description.takeIf { it.isNotBlank() }
             ?: "Say hi to $name"

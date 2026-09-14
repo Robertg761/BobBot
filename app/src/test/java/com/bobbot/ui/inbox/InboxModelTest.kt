@@ -68,6 +68,12 @@ class InboxModelTest {
         assertEquals(Presence.IDLE, inbox(listOf(bot("steve"))).single().presence)
     }
 
+    @Test fun aDecisionForYouShowsAsWaitingWithItsOwnPreview() {
+        val row = buildInbox(listOf(bot("steve")), mapOf("steve" to chat("s1", 1.0, preview = "working")), emptyList(), emptySet(), emptyList(), emptyMap(), names, needsYou = setOf("steve")).single()
+        assertEquals(Presence.WAITING, row.presence)
+        assertEquals("Needs your decision", row.preview)
+    }
+
     @Test fun previewPrefersTheOpenConversationThenServerThenDescription() {
         val live = ChatSessionState(
             liveId = "l1", storedId = "s1", profile = "steve", status = "idle",

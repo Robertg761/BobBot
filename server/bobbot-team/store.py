@@ -22,6 +22,10 @@ class Store:
                     created REAL NOT NULL, expires REAL NOT NULL, review_task TEXT);
                 CREATE INDEX IF NOT EXISTS by_fingerprint ON requests(fingerprint, created);
             ''')
+            # Older stores predate decision scopes. 'exact' = this tool with these arguments, once.
+            # 'tool' = this tool, any arguments, for the rest of that conversation or task.
+            if 'scope' not in [r[1] for r in db.execute('PRAGMA table_info(requests)')]:
+                db.execute("ALTER TABLE requests ADD COLUMN scope TEXT NOT NULL DEFAULT 'exact'")
 
     @contextlib.contextmanager
     def connection(self):
@@ -48,6 +52,13 @@ class Store:
         now = time.time()
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
+            # A standing grant for this tool in this conversation or task covers any arguments and is not used up.
+            grant = db.execute(
+                "SELECT id FROM requests WHERE profile=? AND session=? AND task=? AND tool=? AND scope='tool' AND status='approved' AND expires>? LIMIT 1",
+                (profile, session, task, tool, now)).fetchone()
+            if grant:
+                db.commit()
+                return None
             row = db.execute('SELECT * FROM requests WHERE fingerprint=? ORDER BY created DESC LIMIT 1', (fingerprint,)).fetchone()
             if row and row['status'] == 'approved' and row['expires'] > now:
                 db.execute("UPDATE requests SET status='consumed' WHERE id=?", (row['id'],))
@@ -79,9 +90,15 @@ class Store:
         with self.connection() as db:
             return [dict(r) for r in db.execute(f'SELECT * FROM requests WHERE {column}=? ORDER BY created DESC', (task,))]
 
-    def decide(self, ident, choice, reason, reviewer, human=False):
+    TOOL_GRANT_SECONDS = 8 * 3600
+
+    def decide(self, ident, choice, reason, reviewer, human=False, scope='exact'):
         if choice not in ('approved', 'denied', 'needs_user') or not reason.strip():
             raise ValueError('Choose approved, denied or needs_user and provide a reason')
+        if scope not in ('exact', 'tool'):
+            raise ValueError("Scope is 'exact' (this action once) or 'tool' (this tool for the rest of the conversation)")
+        if scope == 'tool' and choice != 'approved':
+            scope = 'exact'
         if not human and reviewer != self.settings()['authority']:
             raise PermissionError('Only the authority bot may decide')
         with self.connection() as db:
@@ -91,8 +108,9 @@ class Store:
             if not row or row['status'] not in allowed or row['expires'] <= time.time():
                 db.rollback()
                 raise ValueError('Request is no longer awaiting this reviewer')
-            db.execute('UPDATE requests SET status=?,reason=?,reviewer=? WHERE id=?',
-                       (choice, reason.strip(), 'you' if human else reviewer, ident))
+            expires = time.time() + self.TOOL_GRANT_SECONDS if scope == 'tool' else row['expires']
+            db.execute('UPDATE requests SET status=?,reason=?,reviewer=?,scope=?,expires=? WHERE id=?',
+                       (choice, reason.strip(), 'you' if human else reviewer, scope, expires, ident))
             db.commit()
         return self.get(ident)
 

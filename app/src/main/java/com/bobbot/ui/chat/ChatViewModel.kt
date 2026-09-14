@@ -42,6 +42,9 @@ data class ChatUi(
     val isMain: Boolean = false,
     /** Open board tasks this bot is assigned or created: the hand-offs behind the conversation. */
     val tasks: List<com.bobbot.data.model.BoardTask> = emptyList(),
+    /** Team permission requests this bot is currently stopped on. */
+    val permissions: List<com.bobbot.data.repo.TeamRequest> = emptyList(),
+    val authority: String = "default",
 )
 
 @HiltViewModel
@@ -52,8 +55,10 @@ class ChatViewModel @Inject constructor(
     private val models: ModelsRepository,
     private val api: HermesApi,
     private val board: com.bobbot.data.repo.BoardRepository,
+    private val team: com.bobbot.data.repo.TeamRepository,
 ) : ViewModel() {
     private val _ui = MutableStateFlow(ChatUi())
+    private var permissionTicker: Job? = null
     val ui: StateFlow<ChatUi> = _ui
     private var stateJob: Job? = null
     private var profile: String = "default"
@@ -88,13 +93,17 @@ class ChatViewModel @Inject constructor(
                 _ui.update { it.copy(isMain = isMain) }
                 markRead()
                 loadTasks()
+                permissionTicker?.cancel()
+                permissionTicker = viewModelScope.launch {
+                    while (true) { loadPermissions(); kotlinx.coroutines.delay(15_000) }
+                }
                 stateJob?.cancel()
                 stateJob = viewModelScope.launch {
                     chat.state(live)?.collect { s ->
                         val wasBusy = _ui.value.session?.isBusy == true
                         if (!isMain && s.title == ChatRepository.MAIN_CHAT_TITLE) { isMain = true; _ui.update { it.copy(isMain = true) } }
                         _ui.update { it.copy(session = s, liveId = s.liveId) }
-                        if (wasBusy && !s.isBusy) { markRead(); loadTasks() }
+                        if (wasBusy && !s.isBusy) { markRead(); loadTasks(); loadPermissions() }
                     }
                 }
             } catch (e: Exception) {
@@ -102,6 +111,22 @@ class ChatViewModel @Inject constructor(
             } finally {
                 opening = false
             }
+        }
+    }
+
+    /** The team extension's gate for this bot: what it is stopped on, and who has to decide. */
+    suspend fun loadPermissions() {
+        val p = profile
+        val state = runCatching { team.refresh() }.getOrNull() ?: return
+        _ui.update { it.copy(permissions = if (state.installed) state.openFor(p) else emptyList(), authority = state.authority) }
+    }
+
+    fun decidePermission(id: String, choice: String, scope: String) {
+        viewModelScope.launch {
+            runCatching { team.decide(id, choice, scope) }
+                .onFailure { toast(it.message ?: "Could not save the decision") }
+                .onSuccess { toast(if (choice == "approved") "Allowed. ${com.bobbot.data.repo.BotNames.display(profile)} will carry on." else "Denied.") }
+            loadPermissions()
         }
     }
 

@@ -211,6 +211,13 @@ fun ChatScreen(
                 }
                 else -> Column(Modifier.fillMaxSize()) {
                     if (ui.tasks.isNotEmpty()) TaskStrip(ui.tasks, profile, onOpenNetwork)
+                    if (ui.permissions.isNotEmpty()) {
+                        Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ui.permissions.take(3).forEach { r ->
+                                com.bobbot.ui.team.PermissionCard(r, ui.authority, busy = false, onDecide = { c, sc -> vm.decidePermission(r.id, c, sc) })
+                            }
+                        }
+                    }
                     LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), modifier = Modifier.fillMaxSize()) {
                     if (items.isEmpty()) item(key = "intro") { Intro(profile, ui.bot?.description) }
                     items.forEachIndexed { i, item ->
@@ -380,8 +387,8 @@ private fun PromptCard(session: ChatSessionState, botLabel: String, color: Color
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         if ("once" in approval.choices) Button(onClick = { vm.approve("once") }, colors = ButtonDefaults.buttonColors(containerColor = BobColors.Accent, contentColor = BobColors.Bg), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) { Text("Allow") }
-                        if ("session" in approval.choices) TextButton(onClick = { vm.approve("session") }) { Text("This chat") }
-                        if ("always" in approval.choices) TextButton(onClick = { vm.approve("always") }) { Text("Always") }
+                        if ("session" in approval.choices) TextButton(onClick = { vm.approve("session") }) { Text("Allow in this chat") }
+                        if ("always" in approval.choices) TextButton(onClick = { vm.approve("always") }) { Text("Always allow") }
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = { vm.approve("deny") }) { Text("Deny", color = BobColors.Rose) }
                     }

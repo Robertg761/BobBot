@@ -57,6 +57,27 @@ class PermissionsTest(unittest.TestCase):
             db.execute('UPDATE requests SET expires=0')
         self.assertIsNotNone(self.request())
 
+    def test_tool_scope_covers_any_arguments_and_is_not_used_up(self):
+        row = self.request({'command': 'ls'})
+        self.store.decide(row['id'], 'approved', 'Read-only job', 'default', scope='tool')
+        self.assertIsNone(self.request({'command': 'cat notes.md'}))
+        self.assertIsNone(self.request({'command': 'ls'}))
+        self.assertIsNotNone(self.request({'command': 'ls'}, profile='writer'))
+        self.assertIsNotNone(self.request({'command': 'ls'}, session='s2'))
+        self.assertIsNotNone(self.store.gate('research', 's1', 'write_file', {'path': 'x'}))
+
+    def test_tool_scope_only_applies_to_approvals_and_expires(self):
+        row = self.request()
+        self.store.decide(row['id'], 'denied', 'No', 'default', scope='tool')
+        self.assertEqual(self.store.get(row['id'])['scope'], 'exact')
+        with self.assertRaises(ValueError):
+            self.store.decide(self.request({'command': 'x'})['id'], 'approved', 'r', 'default', scope='forever')
+        row = self.request({'command': 'y'})
+        self.store.decide(row['id'], 'approved', 'r', 'default', scope='tool')
+        with self.store.connection() as db:
+            db.execute('UPDATE requests SET expires=0')
+        self.assertIsNotNone(self.request({'command': 'z'}))
+
     def test_decisions_are_immutable(self):
         row = self.request()
         self.store.decide(row['id'], 'denied', 'Outside scope', 'default')

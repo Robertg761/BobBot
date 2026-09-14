@@ -79,10 +79,12 @@ is Clove. New profiles created in BobBot receive the extension when it is instal
 on the connected server.
 
 Specialists submit completed work to the authority for review. Tool actions outside
-the extension's explicit list of read/coordination tools require an exact-action
-permission. Clove can allow the action once, deny it, or send the decision to Robert.
-Hermes' own approval checks still apply. Direct conversations need a retry after a
-decision; board tasks wait on durable review dependencies and resume on the server.
+the extension's list of read and coordination tools need a permission. Clove can allow
+the action once, allow that tool for the rest of the conversation, deny it, or send the
+decision to Robert; in BobBot the bot's chat and the Team & permissions screen offer the
+same three choices. Hermes' own approval checks still apply. The decision is delivered
+back into the bot's chat as a message from Clove and the bot retries by itself; board
+tasks wait on durable review dependencies and resume on the server.
 
 Group conversations and individual tasks have separate context. Assignments should
 include the relevant details and attach or link their results. Groups are bounded

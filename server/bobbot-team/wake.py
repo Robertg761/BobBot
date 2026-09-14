@@ -44,7 +44,10 @@ def nudge_text(row, authority):
     prefix = f'Message from 🤖 {handle} (@{handle}): '
     reason = (row.get('reason') or '').strip()
     reason = (' ' + reason) if reason else ''
-    if row['status'] == 'approved':
+    if row['status'] == 'approved' and row.get('scope') == 'tool':
+        body = (f"Permission {row['id']} approved for the whole conversation.{reason} You may use {row.get('tool', 'that tool')} freely here "
+                'for the next eight hours without asking again. Retry the action now and carry on with the work.')
+    elif row['status'] == 'approved':
         body = (f"Permission {row['id']} approved.{reason} Retry the exact same action now, same tool and same arguments; "
                 'the approval is valid for one hour and is used up by that retry. Then carry on with the work.')
     elif row['status'] == 'denied':

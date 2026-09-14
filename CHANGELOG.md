@@ -2,6 +2,12 @@
 
 ## [1.3.2] - 2026-09-14
 
+### Changed
+- **Permissions you can actually act on.** A bot that is stopped on a team permission shows a card at the top of its chat: who wants which tool, the command or path, what your main bot said, and Allow / Allow this tool here / Deny. The inbox row shows "Needs your decision". Team & permissions is rebuilt around the same cards: what needs you, what the authority is still reviewing, the team, and history folded away.
+- **Decisions have a scope.** "Allow" is this action once; "Allow &lt;tool&gt; here" lets the bot use that tool for the rest of the conversation (8 hours), so it is not stopped again for every read. The authority bot has the same choice and is told to use it for read-only or clearly repeated work.
+- **Bots pick up where they left off.** A decision is delivered into the bot's chat as a message from the authority and it retries on its own; pure lookups (tool search, tool descriptions, listing jobs) no longer need review at all. Requires team extension 0.3.0.
+- Hermes' own tool-approval prompts read "Allow", "Allow in this chat", "Always allow", "Deny".
+
 ### Fixed
 - The keyboard capitalises sentences in chats, group chats, and the description, persona, role and group-name fields. The message box gave the keyboard no hint before, so it stayed lowercase.
 - The send and stop buttons sit inside the message bar with room around them instead of being jammed into its edge.

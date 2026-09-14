@@ -39,9 +39,11 @@ Bot Mode on or off for one profile, which BobBot uses as well as the gateway's
 
 ## Behavior and boundaries
 
-- One approval authorizes one exact tool/arguments combination for one specialist
-  and conversation or board task. It expires after one hour. Changed arguments,
-  another profile, or a second use need another decision.
+- An `exact` approval authorizes one exact tool/arguments combination for one specialist
+  and conversation or board task, expires after one hour, and is used up by the retry.
+  A `tool` approval (`team_decide` with `scope='tool'`, or "Allow &lt;tool&gt; here" in
+  BobBot) allows that tool with any arguments for that specialist in that conversation
+  or task for eight hours. Another profile or another conversation needs its own decision.
 - The hook blocks the initial action and creates a durable review task for Clove.
   Board work waits on that task as a dependency. A direct conversation is not
   replayed: instead the decision is delivered into the specialist's Bot Chat as a

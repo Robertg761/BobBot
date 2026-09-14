@@ -26,6 +26,11 @@ class NudgeTextTest(unittest.TestCase):
         self.assertTrue(text.startswith('Message from 🤖 hermes (@hermes): Permission abc approved. Bounded read.'))
         self.assertIn('Retry the exact same action now', text)
 
+    def test_tool_scope_approval_says_no_more_asking(self):
+        text = wake.nudge_text({'id': 'abc', 'status': 'approved', 'reason': '', 'scope': 'tool', 'tool': 'terminal'}, 'default')
+        self.assertIn('approved for the whole conversation', text)
+        self.assertIn('terminal', text)
+
     def test_denial_tells_the_bot_not_to_retry(self):
         text = wake.nudge_text({'id': 'abc', 'status': 'denied', 'reason': ''}, 'clove')
         self.assertTrue(text.startswith('Message from 🤖 clove (@clove): Permission abc denied.'))
