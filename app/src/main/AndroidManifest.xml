@@ -32,7 +32,6 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:allowEmbedded="true"
-            android:documentLaunchMode="always"
             android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.BobBot.Splash">

@@ -44,3 +44,4 @@ local/
 # Python server extension
 __pycache__/
 *.py[cod]
+.claude/
