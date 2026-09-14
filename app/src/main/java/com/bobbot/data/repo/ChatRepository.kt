@@ -36,8 +36,10 @@ import javax.inject.Singleton
 
 sealed interface ChatItem {
     val id: String
+    /** Authoring time in epoch millis when known (history rows carry it; live items use now). */
+    val at: Long? get() = null
 
-    data class User(override val id: String, val text: String, val images: List<String> = emptyList()) : ChatItem
+    data class User(override val id: String, val text: String, val images: List<String> = emptyList(), override val at: Long? = null) : ChatItem
     data class Assistant(
         override val id: String,
         val text: String,
@@ -48,7 +50,14 @@ sealed interface ChatItem {
         val error: String? = null,
         val usage: JsonElement? = null,
         val model: String? = null,
+        override val at: Long? = null,
     ) : ChatItem
+    /**
+     * A message from another bot. Hermes delivers teammate DMs into a Bot Chat as user-role text
+     * with a "Message from 🤖 name (@name):" prefix, and a teammate's reply comes back as a
+     * background-process completion whose command names the profile. Both render as that bot.
+     */
+    data class Teammate(override val id: String, val profile: String, val text: String, val reply: Boolean = false, override val at: Long? = null) : ChatItem
     data class Tool(
         override val id: String,
         val toolId: String,
@@ -224,7 +233,7 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
         r.child("inflight")?.let { inf ->
             val user = inf.str("user")
             val assistant = inf.str("assistant") ?: inf.str("streaming")
-            if (!user.isNullOrBlank()) st.update { s -> s.copy(items = s.items + ChatItem.User(newId(), user)) }
+            if (!user.isNullOrBlank()) st.update { s -> s.copy(items = s.items + (TeammateText.parse(user)?.let { ChatItem.Teammate(newId(), it.profile, it.text, it.reply) } ?: ChatItem.User(newId(), user))) }
             if (!assistant.isNullOrBlank()) st.update { s ->
                 s.copy(items = s.items + ChatItem.Assistant(newId(), assistant, streaming = r.bool("running") ?: false, status = inf.str("status") ?: "complete", error = inf.str("error")))
             }
@@ -239,12 +248,14 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
         val text = m.str("text") ?: ""
         val kind = m.str("display_kind")
         if (kind == "hidden") return null
+        val at = m.dbl("timestamp")?.takeIf { it > 0 }?.let { (it * 1000).toLong() }
         return when (role) {
             "user" -> when (kind) {
                 "model_switch", "auto_continue", "async_delegation_complete" -> ChatItem.System(newId(), text, kind)
-                else -> ChatItem.User(newId(), text)
+                else -> TeammateText.parse(text)?.let { ChatItem.Teammate(newId(), it.profile, it.text, it.reply, at) }
+                    ?: if (kind == "process_complete") ChatItem.System(newId(), TeammateText.processTitle(text), "background") else ChatItem.User(newId(), text, at = at)
             }
-            "assistant" -> ChatItem.Assistant(newId(), text, reasoning = m.str("reasoning") ?: m.str("reasoning_content") ?: "", streaming = false, status = "complete")
+            "assistant" -> ChatItem.Assistant(newId(), text, reasoning = m.str("reasoning") ?: m.str("reasoning_content") ?: "", streaming = false, status = "complete", at = at)
             "tool" -> ChatItem.Tool(newId(), toolId = newId(), name = m.str("name") ?: "tool", context = m.str("context") ?: "", done = true)
             "system" -> ChatItem.System(newId(), text, "system")
             else -> null
@@ -253,7 +264,7 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
 
     suspend fun send(liveId: String, text: String) {
         val st = sessions[liveId] ?: throw IllegalStateException("unknown session")
-        st.update { it.copy(items = it.items + ChatItem.User(newId(), text, images = it.attachments), attachments = emptyList(), error = null, status = "working") }
+        st.update { it.copy(items = it.items + ChatItem.User(newId(), text, images = it.attachments, at = System.currentTimeMillis()), attachments = emptyList(), error = null, status = "working") }
         try {
             socket.call("prompt.submit", jsonOf("session_id" to liveId, "text" to text))
         } catch (e: RpcException) {
@@ -353,7 +364,7 @@ class ChatRepository @Inject constructor(private val socket: GatewaySocket) {
     private fun handle(st: MutableStateFlow<ChatSessionState>, ev: GatewayEvent) {
         val p = ev.payload
         when (ev.type) {
-            "message.start" -> st.update { it.copy(status = "streaming", statusLine = null, items = it.items + ChatItem.Assistant(newId(), "", model = it.model)) }
+            "message.start" -> st.update { it.copy(status = "streaming", statusLine = null, items = it.items + ChatItem.Assistant(newId(), "", model = it.model, at = System.currentTimeMillis())) }
             "message.delta" -> {
                 val text = p.str("text") ?: return
                 st.update { s -> s.copy(status = "streaming", items = s.items.appendToStreaming { a -> a.copy(text = a.text + text) }) }

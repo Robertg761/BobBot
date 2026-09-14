@@ -97,6 +97,7 @@ fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
                     onBack = { nav.popBackStack() },
                     onOpenProfile = { nav.navigate(Route.BotDetail(it)) },
                     onNewTaskChat = { nav.navigate(Route.Chat(null, it)) },
+                    onOpenNetwork = { nav.navigate(Route.Board) },
                 )
             }
             composable<Route.Group> { entry ->

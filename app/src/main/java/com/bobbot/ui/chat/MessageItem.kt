@@ -79,7 +79,67 @@ fun MessageItem(item: ChatItem, profile: String, groupedAbove: Boolean = false, 
         is ChatItem.Tool -> ActivityLine(item)
         is ChatItem.System -> SystemLine(item)
         is ChatItem.Delegation -> DelegationCard(item, profile)
+        is ChatItem.Teammate -> TeammateBubble(item, groupedAbove, groupedBelow)
     }
+}
+
+/** Another bot speaking in this conversation: its own avatar and name, grey bubble on the left. */
+@Composable
+private fun TeammateBubble(m: ChatItem.Teammate, groupedAbove: Boolean, groupedBelow: Boolean) {
+    Row(Modifier.fillMaxWidth().padding(end = 32.dp), verticalAlignment = Alignment.Bottom) {
+        Box(Modifier.width(36.dp)) { if (!groupedBelow) BotAvatar(m.profile, 28.dp) }
+        Column {
+            if (!groupedAbove) {
+                Text(
+                    if (m.reply) "${botName(m.profile)} replied" else botName(m.profile),
+                    style = MaterialTheme.typography.labelSmall, color = botColor(m.profile), modifier = Modifier.padding(start = 6.dp, bottom = 3.dp),
+                )
+            }
+            Box(
+                Modifier.widthIn(max = BubbleMaxWidth).clip(bubbleShape(mine = false, groupedAbove = groupedAbove, groupedBelow = groupedBelow))
+                    .background(BobColors.BotBubble).padding(horizontal = 14.dp, vertical = 9.dp),
+            ) { MarkdownBody(m.text) }
+        }
+    }
+}
+
+/** "Today", "Yesterday", or a date, centred between days of messages. */
+@Composable
+fun DaySeparator(label: String) {
+    Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp), horizontalArrangement = Arrangement.Center) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = BobColors.TextFaint)
+    }
+}
+
+/** A quiet clock line under the last bubble of a run. */
+@Composable
+fun TimeLabel(at: Long, mine: Boolean) {
+    Row(Modifier.fillMaxWidth().padding(top = 2.dp, start = if (mine) 0.dp else 42.dp, end = 6.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+        Text(timeLabel(at), style = MaterialTheme.typography.labelSmall, color = BobColors.TextFaint.copy(alpha = 0.8f))
+    }
+}
+
+fun dayLabel(at: Long, now: Long = System.currentTimeMillis(), zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String {
+    val day = java.time.Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
+    val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    return when {
+        day == today -> "Today"
+        day == today.minusDays(1) -> "Yesterday"
+        day.year == today.year -> day.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM"))
+        else -> day.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy"))
+    }
+}
+
+fun timeLabel(at: Long, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String =
+    java.time.Instant.ofEpochMilli(at).atZone(zone).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+
+/** True when two entries fall on different local days (unknown times never split). */
+fun startsNewDay(previous: ChatItem?, item: ChatItem, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): Boolean {
+    val at = item.at ?: return false
+    val before = previous?.at ?: return previous == null
+    val a = java.time.Instant.ofEpochMilli(before).atZone(zone).toLocalDate()
+    val b = java.time.Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
+    return a != b
 }
 
 @Composable

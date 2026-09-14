@@ -186,6 +186,7 @@ data class NewBotUiState(
 class NewBotViewModel @Inject constructor(
     private val bots: BotsRepository,
     private val models: ModelsRepository,
+    private val roster: com.bobbot.data.repo.RosterRepository,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(NewBotUiState())
@@ -244,6 +245,8 @@ class NewBotViewModel @Inject constructor(
                     cloneFrom = "default",
                     soul = st.soul.takeIf { it.isNotBlank() },
                 )
+                // New bots join the teammate roster right away; a failure here is not worth blocking creation.
+                runCatching { roster.setTeammateMessaging(st.name, true, st.description.trim()) }
                 _ui.update { it.copy(creating = false, createdName = st.name) }
                 onCreated(st.name)
             } catch (e: Exception) {

@@ -40,6 +40,8 @@ data class ChatUi(
     val attaching: Boolean = false,
     /** True for the bot's ongoing conversation, the one its inbox row stands for. */
     val isMain: Boolean = false,
+    /** Open board tasks this bot is assigned or created: the hand-offs behind the conversation. */
+    val tasks: List<com.bobbot.data.model.BoardTask> = emptyList(),
 )
 
 @HiltViewModel
@@ -49,6 +51,7 @@ class ChatViewModel @Inject constructor(
     private val bots: BotsRepository,
     private val models: ModelsRepository,
     private val api: HermesApi,
+    private val board: com.bobbot.data.repo.BoardRepository,
 ) : ViewModel() {
     private val _ui = MutableStateFlow(ChatUi())
     val ui: StateFlow<ChatUi> = _ui
@@ -84,13 +87,14 @@ class ChatViewModel @Inject constructor(
                 isMain = mainConversation || chat.state(live)?.value?.title == ChatRepository.MAIN_CHAT_TITLE
                 _ui.update { it.copy(isMain = isMain) }
                 markRead()
+                loadTasks()
                 stateJob?.cancel()
                 stateJob = viewModelScope.launch {
                     chat.state(live)?.collect { s ->
                         val wasBusy = _ui.value.session?.isBusy == true
                         if (!isMain && s.title == ChatRepository.MAIN_CHAT_TITLE) { isMain = true; _ui.update { it.copy(isMain = true) } }
                         _ui.update { it.copy(session = s, liveId = s.liveId) }
-                        if (wasBusy && !s.isBusy) markRead()
+                        if (wasBusy && !s.isBusy) { markRead(); loadTasks() }
                     }
                 }
             } catch (e: Exception) {
@@ -98,6 +102,18 @@ class ChatViewModel @Inject constructor(
             } finally {
                 opening = false
             }
+        }
+    }
+
+    private val doneStatuses = setOf("done", "completed", "complete", "archived", "cancelled", "canceled")
+
+    fun loadTasks() {
+        val p = profile
+        viewModelScope.launch {
+            val tasks = runCatching { board.refresh() }.getOrNull() ?: return@launch
+            val mine = tasks.filter { (it.assignee == p || it.createdBy == p) && it.status.lowercase() !in doneStatuses }
+                .sortedByDescending { it.updatedAt ?: it.createdAt ?: "" }.take(8)
+            _ui.update { it.copy(tasks = mine) }
         }
     }
 

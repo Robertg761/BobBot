@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -196,11 +197,14 @@ fun GroupChatScreen(roomId: String, onBack: () -> Unit, onOpenBot: (String) -> U
             )
         },
         bottomBar = {
-            Composer(
-                input = ui.input, onInput = vm::setInput, onSend = vm::send, onStop = vm::stop,
-                busy = false, attachments = emptyList(), attaching = false, onAttach = null,
-                enabled = !ui.busy && ui.room != null, notice = null, placeholder = "Message the group, or @mention a bot",
-            )
+            Column {
+                MentionChips(input = ui.input, members = members, onPick = vm::setInput)
+                Composer(
+                    input = ui.input, onInput = vm::setInput, onSend = vm::send, onStop = vm::stop,
+                    busy = false, attachments = emptyList(), attaching = false, onAttach = null,
+                    enabled = !ui.busy && ui.room != null, notice = null, placeholder = "Message the group, or @mention a bot",
+                )
+            }
         },
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
@@ -244,6 +248,24 @@ fun GroupChatScreen(roomId: String, onBack: () -> Unit, onOpenBot: (String) -> U
                     item(key = "tail") { Spacer(Modifier.height(4.dp)) }
                 }
             }
+        }
+    }
+}
+
+/** While the last word starts with "@", offer the members whose handle matches; tapping completes it. */
+@Composable
+private fun MentionChips(input: String, members: List<String>, onPick: (String) -> Unit) {
+    val token = input.substringAfterLast(' ').substringAfterLast('\n')
+    if (!token.startsWith("@") || members.isEmpty()) return
+    val typed = token.drop(1).lowercase()
+    val handles = members.map { p -> (if (p == "default") "hermes" else p) to p }.filter { (h, p) -> h.startsWith(typed) || botName(p).lowercase().startsWith(typed) }
+    if (handles.isEmpty()) return
+    androidx.compose.foundation.lazy.LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        items(handles.size, key = { handles[it].first }) { i ->
+            val (handle, profile) = handles[i]
+            com.bobbot.ui.components.Pill("@$handle · ${botName(profile)}", color = botColor(profile), onClick = {
+                onPick(input.dropLast(token.length) + "@" + handle + " ")
+            })
         }
     }
 }

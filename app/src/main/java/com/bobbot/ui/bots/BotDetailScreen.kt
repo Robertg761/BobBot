@@ -122,6 +122,9 @@ data class BotDetailUiState(
     val sessionsLoading: Boolean = false,
     val sessionsError: String? = null,
     val automations: List<CronJob> = emptyList(),
+    /** Hermes Bot Mode for this profile; null until known. */
+    val teammateMessaging: Boolean? = null,
+    val role: String = "",
     val catalog: ModelCatalog? = null,
     val catalogLoading: Boolean = false,
     val applyingModel: Boolean = false,
@@ -164,6 +167,7 @@ class BotDetailViewModel @Inject constructor(
     private val bots: BotsRepository,
     private val models: ModelsRepository,
     private val api: HermesApi,
+    private val roster: com.bobbot.data.repo.RosterRepository,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(BotDetailUiState())
@@ -203,6 +207,31 @@ class BotDetailViewModel @Inject constructor(
             loadSkills()
             loadSessions()
             loadAutomations()
+            loadTeammate()
+        }
+    }
+
+    private suspend fun loadTeammate() {
+        val entry = runCatching { roster.roster().firstOrNull { it.profile == name } }.getOrNull() ?: return
+        _ui.update { it.copy(teammateMessaging = entry.teammateMessaging, role = entry.role) }
+    }
+
+    fun setTeammateMessaging(enabled: Boolean) {
+        val n = name
+        _ui.update { it.copy(teammateMessaging = enabled) }
+        viewModelScope.launch {
+            runCatching { roster.setTeammateMessaging(n, enabled, _ui.value.role.ifBlank { _ui.value.bot?.description }) }
+                .onFailure { e -> _ui.update { it.copy(teammateMessaging = !enabled, notice = e.message ?: "Could not change teammate messaging") } }
+                .onSuccess { loadTeammate() }
+        }
+    }
+
+    fun setRole(role: String) {
+        val n = name
+        viewModelScope.launch {
+            runCatching { roster.setTeammateMessaging(n, true, role) }
+                .onFailure { e -> _ui.update { it.copy(notice = e.message ?: "Could not save the role") } }
+                .onSuccess { _ui.update { it.copy(role = role.trim(), teammateMessaging = true, notice = "Role saved") } }
         }
     }
 
@@ -391,6 +420,7 @@ fun BotDetailScreen(
     var showNickname by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var editingDesc by remember { mutableStateOf(false) }
+    var editingRole by remember { mutableStateOf(false) }
 
     val bot = ui.bot
     val accent = botColor(name)
@@ -464,6 +494,34 @@ fun BotDetailScreen(
                     Icon(Icons.Outlined.Forum, null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
                     Text("Chat with ${botName(name)}", style = MaterialTheme.typography.titleSmall)
+                }
+            }
+
+            item(key = "teammate") {
+                BobCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Forum, null, tint = BobColors.Mint, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Teammate messaging", style = MaterialTheme.typography.titleSmall, color = BobColors.Text)
+                            Text(
+                                when (ui.teammateMessaging) {
+                                    true -> ui.role.ifBlank { "Other bots can message ${botName(name)} and see it in their roster." }
+                                    false -> "Off. Other bots can't message ${botName(name)}."
+                                    null -> "Checking…"
+                                },
+                                style = MaterialTheme.typography.bodySmall, color = BobColors.TextMuted, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Switch(checked = ui.teammateMessaging == true, enabled = ui.teammateMessaging != null, onCheckedChange = { vm.setTeammateMessaging(it) })
+                    }
+                    if (ui.teammateMessaging == true) {
+                        TextButton(onClick = { editingRole = true }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                            Icon(Icons.Outlined.Edit, null, modifier = Modifier.size(16.dp), tint = BobColors.Accent)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Edit role line", color = BobColors.Accent)
+                        }
+                    }
                 }
             }
 
@@ -663,6 +721,26 @@ fun BotDetailScreen(
                 showPicker = false
                 vm.applyModel(provider, model)
             },
+        )
+    }
+
+    if (editingRole) {
+        var value by remember { mutableStateOf(ui.role) }
+        AlertDialog(
+            onDismissRequest = { editingRole = false },
+            containerColor = BobColors.SurfaceRaised,
+            titleContentColor = BobColors.Text,
+            textContentColor = BobColors.TextMuted,
+            title = { Text("Role line") },
+            text = {
+                Column {
+                    Text("One line the other bots see when choosing whom to message, e.g. \"Research and web digging\".", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = value, onValueChange = { value = it }, singleLine = true, label = { Text("Role") }, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = { TextButton(onClick = { editingRole = false; vm.setRole(value) }, enabled = value.isNotBlank()) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { editingRole = false }) { Text("Cancel", color = BobColors.TextMuted) } },
         )
     }
 

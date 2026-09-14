@@ -119,6 +119,7 @@ fun livePreview(s: ChatSessionState): String? {
             last.streaming -> "Typing…"
             else -> null
         }
+        is ChatItem.Teammate -> "${com.bobbot.data.repo.BotNames.display(last.profile)}: ${last.text}"
         is ChatItem.Tool -> "Using ${last.name}…"
         is ChatItem.Delegation -> "Working on: ${last.goal}"
         is ChatItem.System -> null

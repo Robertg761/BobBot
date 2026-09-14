@@ -1,10 +1,13 @@
 name: bobbot-team
-version: "0.1.0"
-description: "Clove task coordination and exact-action permission review for BobBot specialists."
+version: "0.2.0"
+description: "Clove task coordination, bot creation, teammate messaging and exact-action permission review for BobBot."
 hooks:
   - pre_tool_call
 provides_tools:
   - team_permissions
   - team_decide
+  - list_bots
+  - create_bot
+  - configure_bot
 provides_hooks:
   - pre_tool_call

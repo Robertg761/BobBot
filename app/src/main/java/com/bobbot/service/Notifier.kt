@@ -68,6 +68,7 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
     /** A message from a bot. Tapping it deep-links into the session it came from. */
     fun botMessage(bot: String, title: String, text: String, sessionId: String?, profile: String?) {
         val body = text.ifBlank { "(no content)" }
+        val id = seq.incrementAndGet()
         val n = base(CH_BOTS)
             .setContentTitle(title.ifBlank { bot })
             .setContentText(body.lineSequence().firstOrNull()?.take(120) ?: body)
@@ -76,8 +77,9 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
             .setContentIntent(openApp(sessionId, profile))
+            .apply { if (sessionId != null && profile != null) addAction(replyAction(id, sessionId, profile)) }
             .build()
-        post(seq.incrementAndGet(), n)
+        post(id, n)
     }
 
     /** One bot talking to another on the board. */
@@ -90,7 +92,7 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setAutoCancel(true)
-            .setContentIntent(openApp(null, null))
+            .setContentIntent(openApp(null, to))
             .build()
         post(seq.incrementAndGet(), n)
     }
@@ -154,6 +156,33 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+    }
+
+    /** Direct reply from the shade: the text goes to the same session through [ReplyReceiver]. */
+    private fun replyAction(notificationId: Int, sessionId: String, profile: String): NotificationCompat.Action {
+        val remote = androidx.core.app.RemoteInput.Builder(ReplyReceiver.KEY_TEXT).setLabel("Reply").build()
+        val intent = Intent(ctx, ReplyReceiver::class.java).apply {
+            action = ReplyReceiver.ACTION_REPLY
+            putExtra(ReplyReceiver.EXTRA_SESSION, sessionId)
+            putExtra(ReplyReceiver.EXTRA_PROFILE, profile)
+            putExtra(ReplyReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+        }
+        val pending = PendingIntent.getBroadcast(ctx, notificationId, intent, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        return NotificationCompat.Action.Builder(0, "Reply", pending).addRemoteInput(remote).setAllowGeneratedReplies(false).build()
+    }
+
+    /** Swap a message notification for a short confirmation after a reply went out. */
+    fun replied(notificationId: Int, bot: String, ok: Boolean, text: String) {
+        val n = base(CH_BOTS)
+            .setContentTitle(if (ok) "Sent to $bot" else "Reply to $bot failed")
+            .setContentText(text.take(120))
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setTimeoutAfter(if (ok) 4_000 else 30_000)
+            .setContentIntent(openApp(null, bot))
+            .build()
+        post(notificationId, n)
     }
 
     private fun stopLinkIntent(): PendingIntent {

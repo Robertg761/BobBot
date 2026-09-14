@@ -18,9 +18,9 @@ router = APIRouter()
 
 @router.get('/team')
 def get_team():
-    from hermes_cli.profiles import list_profiles
-    return {**team.store().settings(), 'profiles': [{'name': p.name} for p in list_profiles()],
-            'requests': team.store().requests()}
+    roster = team.bots.roster()
+    return {**team.store().settings(), 'profiles': roster, 'requests': team.store().requests(),
+            'teammate_messaging': any(p['teammate_messaging'] for p in roster)}
 
 
 class Settings(BaseModel):
@@ -54,20 +54,29 @@ def decide(ident: str, body: Decision):
 
 @router.post('/profiles/{profile}/bootstrap')
 def bootstrap(profile: str):
+    try:
+        team.bots.bootstrap_profile(profile, Path(__file__).resolve().parents[1])
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409 if 'different team extension' in str(exc) else 500, str(exc)) from exc
+    return {'configured': True}
+
+
+class BotMode(BaseModel):
+    title: str | None = None
+    enabled: bool = True
+
+
+@router.put('/profiles/{profile}/teammate-messaging')
+def set_teammate_messaging(profile: str, body: BotMode):
+    """Turn Hermes Bot Mode on (or off) for one bot: the roster line other bots see, and the
+    message_agent tool in its Bot Chat. New Bot Chat turns pick it up; open ones after a restart."""
     from hermes_cli.profiles import get_profile_dir, profile_exists
-    from subprocess import run
     if not profile_exists(profile):
         raise HTTPException(400, 'Profile does not exist')
-    dest = get_profile_dir(profile) / 'plugins' / 'bobbot-team'
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    source = Path(__file__).resolve().parents[1]
-    if not dest.exists():
-        dest.symlink_to(source, target_is_directory=True)
-    elif dest.resolve() != source:
-        raise HTTPException(409, 'A different team extension is already installed for this profile')
-    for command in [['plugins', 'enable', 'bobbot-team', '--no-allow-tool-override'], ['tools', 'enable', 'kanban', 'bobbot_team']]:
-        result = run([sys.executable, '-m', 'hermes_cli.main', '-p', profile, *command],
-                     capture_output=True, text=True, timeout=45)
-        if result.returncode:
-            raise HTTPException(500, 'Could not configure team tools for this profile')
-    return {'configured': True}
+    if body.enabled:
+        block = team.bots.enable_teammate_messaging(profile, body.title)
+    else:
+        block = team.bots.set_bot_mode(get_profile_dir(profile), enabled=False)
+    return {'profile': profile, 'teammate_messaging': block is not None, 'role': (block or {}).get('title', '')}

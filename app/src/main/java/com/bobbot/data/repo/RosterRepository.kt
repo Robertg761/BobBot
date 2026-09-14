@@ -33,6 +33,10 @@ data class RosterEntry(
     val chat: BotChat?,
     /** Newest worker session heartbeat (kanban / sub-agent runs); workers beat every ≤60 s while running. */
     val workerLastActive: Double?,
+    /** Hermes Bot Mode: this profile carries `ui_meta.hermes-bots`, so it appears in every bot's roster. */
+    val teammateMessaging: Boolean = false,
+    /** The one-line role other bots see for it. */
+    val role: String = "",
 ) {
     fun workerBusy(nowMillis: Long = System.currentTimeMillis()): Boolean {
         val at = workerLastActive ?: return false
@@ -74,14 +78,31 @@ class RosterRepository @Inject constructor(private val socket: GatewaySocket, pr
             // Read and pin state live on the session row; a failed detail read leaves them at their defaults.
             runCatching { api.sessionDetail(name.takeIf { it != "default" }, resolved) }.getOrNull()?.let { d -> withDetail(base, d) } ?: base
         }
+        val botMode = row.child("ui_meta")?.child(BOT_MODE_KEY)
         return RosterEntry(
             profile = name,
             chat = chat,
             workerLastActive = row.child("worker_session")?.dbl("last_active"),
+            teammateMessaging = botMode != null,
+            role = botMode.str("title") ?: "",
         )
     }
 
+    /**
+     * Turn Hermes Bot Mode on for a profile by writing the same profile metadata the Hermes desktop
+     * app writes. With at least one managed profile, every Bot Chat gets the teammate roster and
+     * the `message_agent` tool on its next turn.
+     */
+    suspend fun setTeammateMessaging(profile: String, enabled: Boolean, role: String? = null) {
+        socket.ensureConnected()
+        val block: Any? = if (enabled) jsonOf("title" to (role?.trim()?.take(160)?.ifBlank { null } ?: BotNames.display(profile)), "managed_by" to "bobbot") else null
+        val r = socket.call("profiles.configure", jsonOf("name" to profile, "ui_meta" to jsonOf(BOT_MODE_KEY to block)))
+        check(r.child("applied").bool("ui_meta") != false) { "Hermes did not accept the change" }
+    }
+
     companion object {
+        const val BOT_MODE_KEY = "hermes-bots"
+
         /** Unread mirrors Hermes: activity after the `last_read_at` watermark; never-tracked means read. */
         fun withDetail(chat: BotChat, detail: JsonElement): BotChat {
             val lastRead = detail.dbl("last_read_at")

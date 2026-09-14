@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -99,6 +100,7 @@ fun ChatScreen(
     onBack: () -> Unit,
     onOpenProfile: (profile: String) -> Unit,
     onNewTaskChat: (profile: String) -> Unit,
+    onOpenNetwork: () -> Unit = {},
     vm: ChatViewModel = hiltViewModel(),
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -200,7 +202,9 @@ fun ChatScreen(
                     Spacer(Modifier.height(16.dp))
                     OutlinedButton(onClick = { vm.retry(sessionId) }) { Text("Try again") }
                 }
-                else -> LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), modifier = Modifier.fillMaxSize()) {
+                else -> Column(Modifier.fillMaxSize()) {
+                    if (ui.tasks.isNotEmpty()) TaskStrip(ui.tasks, profile, onOpenNetwork)
+                    LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), modifier = Modifier.fillMaxSize()) {
                     if (items.isEmpty()) item(key = "intro") { Intro(profile, ui.bot?.description) }
                     items.forEachIndexed { i, item ->
                         val above = items.getOrNull(i - 1)
@@ -208,8 +212,12 @@ fun ChatScreen(
                         val groupedAbove = sameSender(above, item)
                         val groupedBelow = sameSender(item, below)
                         item(key = item.id) {
-                            Spacer(Modifier.height(if (i == 0) 0.dp else gapBetween(groupedAbove)))
+                            val at = item.at
+                            if (at != null && startsNewDay(above, item)) DaySeparator(dayLabel(at))
+                            else Spacer(Modifier.height(if (i == 0) 0.dp else gapBetween(groupedAbove)))
                             MessageItem(item, profile, groupedAbove, groupedBelow)
+                            val settled = item is ChatItem.User || item is ChatItem.Teammate || (item is ChatItem.Assistant && !item.streaming && item.text.isNotBlank())
+                            if (at != null && !groupedBelow && settled) TimeLabel(at, mine = item is ChatItem.User)
                         }
                     }
                     if (showTyping) item(key = "typing") {
@@ -221,6 +229,7 @@ fun ChatScreen(
                         PromptCard(session, botLabel, color, vm)
                     }
                     item(key = "tail") { Spacer(Modifier.height(4.dp)) }
+                    }
                 }
             }
         }
@@ -274,8 +283,37 @@ private fun sameSender(a: ChatItem?, b: ChatItem?): Boolean = when {
     a == null || b == null -> false
     a is ChatItem.User && b is ChatItem.User -> true
     a is ChatItem.Assistant && b is ChatItem.Assistant -> true
+    a is ChatItem.Teammate && b is ChatItem.Teammate -> a.profile == b.profile && a.reply == b.reply
     else -> false
 }
+
+/** The board work behind this conversation: what this bot is doing or has handed out. Tap for the network. */
+@Composable
+private fun TaskStrip(tasks: List<com.bobbot.data.model.BoardTask>, profile: String, onOpen: () -> Unit) {
+    androidx.compose.foundation.lazy.LazyRow(
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        items(tasks.size, key = { tasks[it].id }) { i ->
+            val t = tasks[i]
+            val other = if (t.assignee == profile) t.createdBy else t.assignee
+            val label = buildString {
+                if (t.assignee == profile) append("For ${botLabelOf(other)}: ") else append("${botLabelOf(other)}: ")
+                append(t.title.take(40))
+            }
+            val color = when (t.status.lowercase()) {
+                "in_progress", "running", "doing" -> BobColors.Amber
+                "review", "in_review" -> BobColors.Violet
+                "blocked", "waiting" -> BobColors.Rose
+                else -> BobColors.TextMuted
+            }
+            com.bobbot.ui.components.Pill(label, color = color, onClick = onOpen)
+        }
+    }
+}
+
+private fun botLabelOf(profile: String?): String = profile?.takeIf { it.isNotBlank() }?.let { com.bobbot.data.repo.BotNames.display(it) } ?: "board"
 
 @Composable
 private fun Intro(profile: String, description: String?) {

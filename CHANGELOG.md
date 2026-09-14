@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.0] - 2026-09-14
+
+### Added
+- **Bots can message each other.** Hermes' teammate messaging (Bot Mode) is switched on for every bot from the inbox banner, automatically for bots BobBot creates, and per bot from its profile, where you can also set the one-line role other bots see. Each bot's chat then carries the roster and the `message_agent` tool.
+- **Teammate messages look like messages.** A DM from another bot, and a bot's reply to a DM this bot sent, show as that bot's bubble with its avatar and name instead of as your text or a system line. Inbox previews read "Steve: …".
+- **Clove can create bots by talking.** The team extension adds `create_bot` (name, role, persona, model; cloned from the authority, enrolled in teammate messaging and team review), `configure_bot`, and `list_bots`. Bots messaging each other no longer needs a permission review.
+- **Hand-offs in the chat.** Open board tasks a bot is assigned or created appear as chips above its conversation; tap one for the network. Board notifications open the assignee's chat.
+- **Groups**: @mention completion for members while you type.
+- **Reply from the notification shade**; the reply goes into the same conversation.
+- Day separators and times in chats.
+
+### Changed
+- The inbox refreshes from gateway change events and asks the server only once a minute otherwise.
+- Welcome screen copy describes the inbox layout.
+- Team extension version 0.2.0. Reinstall it with `server/install.py` to pick up the new tools.
+
 ## [1.2.0] - 2026-09-14
 
 ### Changed

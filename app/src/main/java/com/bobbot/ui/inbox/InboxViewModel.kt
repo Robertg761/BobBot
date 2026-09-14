@@ -36,6 +36,9 @@ data class InboxUi(
     val query: String = "",
     val searching: Boolean = false,
     val searchResults: List<SessionSummary>? = null,
+    /** Hermes Bot Mode across the install: null until the roster loads. */
+    val teammateMessaging: Boolean? = null,
+    val enablingTeammates: Boolean = false,
 ) {
     /** Rows filtered by the search box; a blank query shows everything. */
     val visible: List<InboxRow>
@@ -93,10 +96,10 @@ class InboxViewModel @Inject constructor(
         viewModelScope.launch { chat.changes.collect { if (it == "sessions.changed") load(quiet = true) } }
         viewModelScope.launch { chat.completions.collect { load(quiet = true) } }
         viewModelScope.launch { runCatching { chat.connect() } }
-        // Activity from the desktop, cron delivery and worker heartbeats only show up by asking again.
+        // sessions.changed covers chats; worker heartbeats and desktop-side edits need an occasional ask.
         viewModelScope.launch {
             while (true) {
-                delay(20_000)
+                delay(60_000)
                 load(quiet = true)
             }
         }
@@ -108,8 +111,9 @@ class InboxViewModel @Inject constructor(
             if (!quiet) _ui.update { it.copy(loading = it.rows.isEmpty(), error = null) }
             try {
                 val botList = bots.refresh()
-                rosterRows.value = roster.roster()
-                _ui.update { it.copy(loading = false, error = null, bots = botList) }
+                val rows = roster.roster()
+                rosterRows.value = rows
+                _ui.update { it.copy(loading = false, error = null, bots = botList, teammateMessaging = rows.any { r -> r.teammateMessaging }) }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 _ui.update { it.copy(loading = false, error = e.message ?: "Could not load your bots") }
@@ -155,6 +159,22 @@ class InboxViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { api.patchSession(row.profile.takeIf { it != "default" }, id, pinned = pinned) }
                 .onFailure { e -> _ui.update { it.copy(error = e.message) } }
+            load(quiet = true)
+        }
+    }
+
+    /** Flag every bot as a Hermes teammate so they can message each other (the role line is the description). */
+    fun enableTeammateMessaging() {
+        if (_ui.value.enablingTeammates) return
+        viewModelScope.launch {
+            _ui.update { it.copy(enablingTeammates = true) }
+            val descriptions = bots.bots.value.associate { it.name to it.description }
+            var failure: String? = null
+            for (entry in rosterRows.value.filterNot { it.teammateMessaging }) {
+                runCatching { roster.setTeammateMessaging(entry.profile, true, descriptions[entry.profile]) }
+                    .onFailure { failure = it.message ?: "Could not update ${entry.profile}" }
+            }
+            _ui.update { it.copy(enablingTeammates = false, error = failure) }
             load(quiet = true)
         }
     }

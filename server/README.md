@@ -26,6 +26,17 @@ The default authority is the `default` profile, Clove on Robert's installation.
 Changing a display name does not change its profile ID. Network → Permissions can
 select a different existing authority and enable or disable team review.
 
+## Bots creating bots
+
+The authority profile gets three extra tools: `list_bots`, `create_bot` (name, role, optional
+persona, model and provider; the profile is cloned from the authority, its SOUL.md heading is
+the bot's name, it is flagged for Hermes teammate messaging and linked into this extension)
+and `configure_bot`. Specialists get `list_bots` only and are told to ask the authority.
+`message_agent`, Hermes' own bot-to-bot DM tool, is treated as coordination and never needs
+an action review. `PUT /api/plugins/bobbot-team/profiles/{name}/teammate-messaging` turns
+Bot Mode on or off for one profile, which BobBot uses as well as the gateway's
+`profiles.configure`.
+
 ## Behavior and boundaries
 
 - One approval authorizes one exact tool/arguments combination for one specialist

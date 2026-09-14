@@ -135,6 +135,10 @@ fun InboxScreen(actions: InboxActions, vm: InboxViewModel = hiltViewModel()) {
                 )
             }
 
+            if (ui.teammateMessaging == false && ui.bots.size >= 2 && ui.query.isBlank()) {
+                TeammateBanner(busy = ui.enablingTeammates, onEnable = vm::enableTeammateMessaging)
+            }
+
             val rows = ui.visible
             when {
                 ui.loading && rows.isEmpty() -> LoadingRow("Loading your bots…")
@@ -188,6 +192,22 @@ fun InboxScreen(actions: InboxActions, vm: InboxViewModel = hiltViewModel()) {
                 Spacer(Modifier.height(12.dp))
             }
         }
+    }
+}
+
+/** Hermes only lets bots message each other once a profile is flagged as a teammate. One tap flags them all. */
+@Composable
+private fun TeammateBanner(busy: Boolean, onEnable: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(16.dp)).background(BobColors.AccentSoft).padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Your bots can't message each other yet", style = MaterialTheme.typography.titleSmall, color = BobColors.Text)
+            Text("Turn on Hermes teammate messaging so they can hand work around.", style = MaterialTheme.typography.bodySmall, color = BobColors.TextMuted)
+        }
+        Spacer(Modifier.width(8.dp))
+        androidx.compose.material3.TextButton(onClick = onEnable, enabled = !busy) { Text(if (busy) "Enabling…" else "Enable", color = BobColors.Accent) }
     }
 }
 
