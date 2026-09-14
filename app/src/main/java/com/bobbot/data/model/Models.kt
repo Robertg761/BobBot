@@ -155,16 +155,29 @@ data class CronRun(
     val status: String?,
     val output: String?,
     val error: String?,
+    val messageCount: Int = 0,
+    val profile: String = "default",
 ) {
     companion object {
+        private fun epochToIso(v: Double?): String? = v?.takeIf { it > 0 }?.let {
+            java.time.Instant.ofEpochMilli((it * 1000).toLong()).toString()
+        }
+
+        /** Runs are ordinary sessions (`cron_<job>_<ts>`); the reply text is not inlined here. */
         fun from(j: JsonElement, jobId: String): CronRun = CronRun(
-            id = j.str("id") ?: j.str("run_id") ?: (j.str("started_at") ?: ""),
+            id = j.str("id") ?: j.str("run_id") ?: "",
             jobId = j.str("job_id") ?: jobId,
-            startedAt = j.str("started_at") ?: j.str("fired_at"),
-            finishedAt = j.str("finished_at") ?: j.str("completed_at"),
-            status = j.str("status"),
+            startedAt = j.str("started_at_iso") ?: epochToIso(j.dbl("started_at")) ?: j.str("started_at") ?: j.str("fired_at"),
+            finishedAt = epochToIso(j.dbl("ended_at")) ?: j.str("finished_at") ?: j.str("completed_at"),
+            status = j.str("status") ?: when {
+                j.bool("is_active") == true -> "running"
+                j.dbl("ended_at") != null || (j.int("message_count") ?: 0) > 1 -> "ok"
+                else -> null
+            },
             output = j.str("output") ?: j.str("result") ?: j.str("response"),
             error = j.str("error"),
+            messageCount = j.int("message_count") ?: 0,
+            profile = j.str("profile") ?: "default",
         )
     }
 }

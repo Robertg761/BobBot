@@ -295,18 +295,22 @@ class LinkService : Service() {
             seen[job.id] = last
             changed = true
             if (priming || firstSightOfJob) continue
-            // ntfy deliveries already arrive on the push stream; don't double-notify.
-            if (job.deliver.equals("ntfy", ignoreCase = true)) continue
+
+            val failed = (job.lastStatus ?: "").equals("error", ignoreCase = true) || !job.lastError.isNullOrBlank()
+            // Hermes already delivers these runs to a real channel (Telegram, Discord, ntfy…);
+            // repeating them here is just noise. Failures are still worth a heads-up.
+            val deliversElsewhere = job.deliver.isNotBlank() && !job.deliver.equals("local", ignoreCase = true)
+            if (deliversElsewhere && !failed) continue
 
             val run = runCatching { automations.runs(job, 1).firstOrNull() }.getOrNull()
             val output = run?.output?.takeIf { it.isNotBlank() }
-                ?: run?.error?.takeIf { it.isNotBlank() }
-                ?: job.lastError?.takeIf { it.isNotBlank() }
-                ?: "finished"
-            if (output.contains("[SILENT]")) continue
-
-            val ok = !(job.lastStatus ?: run?.status).equals("error", ignoreCase = true)
-            notifier.automation(job.name, job.profile, output, ok)
+            if (failed) {
+                notifier.automation(job.name, job.profile, job.lastError?.takeIf { it.isNotBlank() } ?: run?.error ?: "The run failed", ok = false)
+                continue
+            }
+            // No reply, or the job explicitly chose silence: nothing to report.
+            if (output == null || output.contains("[SILENT]")) continue
+            notifier.automation(job.name, job.profile, output, ok = true)
         }
         if (changed) prefs.setLastCronSeen(encodeMap(seen))
     }

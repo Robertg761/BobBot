@@ -233,7 +233,7 @@ fun SettingsScreen(
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = BobColors.OutlineSoft)
                 ToggleRow(
                     title = "Automation results",
-                    subtitle = "Output from scheduled jobs that don't deliver via ntfy",
+                    subtitle = "Only jobs with no delivery channel, plus any failures. Silent runs never notify.",
                     checked = state.watchCron,
                     onCheckedChange = { vm.setWatch(cron = it) },
                 )

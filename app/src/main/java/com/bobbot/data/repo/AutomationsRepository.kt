@@ -7,6 +7,9 @@ import com.bobbot.core.net.list
 import com.bobbot.core.net.str
 import com.bobbot.data.model.CronJob
 import com.bobbot.data.model.CronRun
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
@@ -26,7 +29,27 @@ class AutomationsRepository @Inject constructor(private val api: HermesApi) {
         return list
     }
 
-    suspend fun runs(job: CronJob, limit: Int = 20): List<CronRun> = api.cronRuns(job.id, job.profile.takeIf { it != "default" }, limit)
+    /** Run history with the reply text filled in from each run session's last assistant message. */
+    suspend fun runs(job: CronJob, limit: Int = 20): List<CronRun> = coroutineScope {
+        val profile = job.profile.takeIf { it != "default" }
+        api.cronRuns(job.id, profile, limit).map { run ->
+            async { run.copy(output = run.output ?: runOutput(run)) }
+        }.awaitAll()
+    }
+
+    /**
+     * The text a run produced, or null when it produced nothing. Hermes writes `[SILENT]` (or an
+     * empty reply) when a job decides there is nothing worth saying, so callers should treat
+     * null / `[SILENT]` as "no news".
+     */
+    suspend fun runOutput(run: CronRun): String? {
+        if (run.id.isBlank()) return null
+        val r = runCatching { api.sessionMessages(run.profile.takeIf { it != "default" }, run.id, limit = 200) }.getOrNull() ?: return null
+        val last = r.list("messages").lastOrNull { m ->
+            m.str("role") == "assistant" && !m.str("content").isNullOrBlank()
+        } ?: return null
+        return last.str("content")?.trim()?.takeIf { it.isNotBlank() }
+    }
 
     suspend fun deliveryTargets(profile: String? = null): List<DeliveryTarget> {
         val r = api.cronDeliveryTargets(profile?.takeIf { it != "default" })

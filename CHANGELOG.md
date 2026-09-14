@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.2] - 2026-09-14
+
+### Fixed
+- **Automation notifications were noisy**: every run of a scheduled job produced a "finished" notification, including silent runs like the email monitor finding nothing. BobBot now reads the run's actual reply, stays quiet for `[SILENT]` or empty runs, and skips jobs that already deliver to Telegram, ntfy, or another channel. Failures still notify.
+- **Run history** in Automations now shows each run's real reply text instead of a blank preview.
+
 ## [1.0.1] - 2026-09-14
 
 ### Changed
