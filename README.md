@@ -26,11 +26,12 @@ Dark theme only. Kotlin, Jetpack Compose, Material 3.
 
 ```
 export ANDROID_HOME=$HOME/Android/Sdk
+export JAVA_HOME=/usr/lib/jvm/java-17-temurin   # any JDK 17 works
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-JDK 17 (`gradle.properties` pins `org.gradle.java.home`), AGP 9.3, Kotlin 2.4, compileSdk 37, minSdk 26.
+JDK 17, AGP 9.3, Kotlin 2.4, compileSdk 37, minSdk 26.
 
 ## Releases and updates
 
