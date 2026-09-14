@@ -36,8 +36,11 @@ data class NotificationPrefs(
     val ntfyServer: String = "https://ntfy.sh",
     val ntfyTopic: String = "",
     val ntfyToken: String = "",
-    val watchBoard: Boolean = true,
+    /** Bot-to-bot board traffic (a bot finishing or stalling on work another bot handed it). Off by default. */
+    val watchBoard: Boolean = false,
     val watchCron: Boolean = true,
+    /** A team permission escalated to you by the authority bot. */
+    val watchDecisions: Boolean = true,
 )
 
 @Singleton
@@ -56,6 +59,8 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
         val NTFY_TOKEN = stringPreferencesKey("ntfy_token")
         val WATCH_BOARD = booleanPreferencesKey("watch_board")
         val WATCH_CRON = booleanPreferencesKey("watch_cron")
+        val WATCH_DECISIONS = booleanPreferencesKey("watch_decisions")
+        val NOTIFIED_DECISIONS = stringPreferencesKey("notified_decisions")
         val LAST_CRON_SEEN = stringPreferencesKey("last_cron_seen")
         val LAST_BOARD_CURSOR = longPreferencesKey("last_board_cursor")
         val NICKNAMES = stringPreferencesKey("bot_nicknames")
@@ -82,8 +87,9 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
             ntfyServer = p[K.NTFY_SERVER] ?: "https://ntfy.sh",
             ntfyTopic = p[K.NTFY_TOPIC] ?: "",
             ntfyToken = p[K.NTFY_TOKEN] ?: "",
-            watchBoard = p[K.WATCH_BOARD] ?: true,
+            watchBoard = p[K.WATCH_BOARD] ?: false,
             watchCron = p[K.WATCH_CRON] ?: true,
+            watchDecisions = p[K.WATCH_DECISIONS] ?: true,
         )
     }
 
@@ -110,9 +116,17 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
     suspend fun setNtfy(server: String, topic: String, token: String) = context.dataStore.edit {
         it[K.NTFY_SERVER] = server.trimEnd('/'); it[K.NTFY_TOPIC] = topic.trim(); it[K.NTFY_TOKEN] = token.trim()
     }
-    suspend fun setWatch(board: Boolean? = null, cron: Boolean? = null) = context.dataStore.edit {
+    suspend fun setWatch(board: Boolean? = null, cron: Boolean? = null, decisions: Boolean? = null) = context.dataStore.edit {
         board?.let { v -> it[K.WATCH_BOARD] = v }
         cron?.let { v -> it[K.WATCH_CRON] = v }
+        decisions?.let { v -> it[K.WATCH_DECISIONS] = v }
+    }
+
+    /** Permission requests already announced, so a poll never repeats one. Bounded to the newest 200. */
+    val notifiedDecisions: Flow<Set<String>> = context.dataStore.data.map { (it[K.NOTIFIED_DECISIONS] ?: "").split(',').filter { s -> s.isNotBlank() }.toSet() }
+    suspend fun markDecisionNotified(id: String) = context.dataStore.edit {
+        val ids = ((it[K.NOTIFIED_DECISIONS] ?: "").split(',').filter { s -> s.isNotBlank() } + id).takeLast(200)
+        it[K.NOTIFIED_DECISIONS] = ids.joinToString(",")
     }
 
     val lastCronSeen: Flow<String> = context.dataStore.data.map { it[K.LAST_CRON_SEEN] ?: "" }

@@ -225,8 +225,15 @@ fun SettingsScreen(
 
             BobCard {
                 ToggleRow(
-                    title = "Board activity",
-                    subtitle = "When one bot assigns, comments or completes for another",
+                    title = "Decisions for you",
+                    subtitle = "When your main bot escalates a specialist's permission request to you",
+                    checked = state.watchDecisions,
+                    onCheckedChange = { vm.setWatch(decisions = it) },
+                )
+                HorizontalDivider(Modifier.padding(vertical = 8.dp), color = BobColors.OutlineSoft)
+                ToggleRow(
+                    title = "Bot-to-bot hand-offs",
+                    subtitle = "When a bot finishes or gets stuck on work another bot gave it. Internal team reviews never notify.",
                     checked = state.watchBoard,
                     onCheckedChange = { vm.setWatch(board = it) },
                 )

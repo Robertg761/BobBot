@@ -27,7 +27,12 @@ data class BoardActivity(
     val taskTitle: String,
     val text: String,
     val at: String?,
-)
+    /** Who created the task; the team extension's review tasks are plumbing, not conversation. */
+    val createdBy: String? = null,
+) {
+    /** The team extension's permission-review tasks: bots talking to their reviewer, never worth a notification. */
+    val isTeamPlumbing: Boolean get() = createdBy == "bobbot-team" || taskTitle.startsWith("Permission:", ignoreCase = true)
+}
 
 @Singleton
 class BoardRepository @Inject constructor(private val api: HermesApi) {
@@ -84,10 +89,10 @@ class BoardRepository @Inject constructor(private val api: HermesApi) {
                     "spawned" -> Triple(null, t.assignee, "started working on “${t.title}”")
                     else -> Triple(e.author, null, "${e.kind} on “${t.title}”")
                 }
-                out += BoardActivity("${t.id}:${e.id}", e.kind, from, to, t.id, t.title, text, e.createdAt)
+                out += BoardActivity("${t.id}:${e.id}", e.kind, from, to, t.id, t.title, text, e.createdAt, t.createdBy)
             }
             if (events.isEmpty()) for (c in comments) {
-                out += BoardActivity("${t.id}:c${c.id}", "commented", c.author, t.assignee?.takeIf { it != c.author } ?: t.createdBy, t.id, t.title, c.body, c.createdAt)
+                out += BoardActivity("${t.id}:c${c.id}", "commented", c.author, t.assignee?.takeIf { it != c.author } ?: t.createdBy, t.id, t.title, c.body, c.createdAt, t.createdBy)
             }
         }
         val sorted = out.sortedByDescending { it.at ?: "" }.take(limit)

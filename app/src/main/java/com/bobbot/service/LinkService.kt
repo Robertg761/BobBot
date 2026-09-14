@@ -65,7 +65,9 @@ class LinkService : Service() {
         const val ACTION_STOP = "com.bobbot.service.LinkService.STOP"
 
         private const val TAG = "LinkService"
-        private val ACTIVITY_KINDS = setOf("assigned", "commented", "completed", "blocked")
+        /** Only outcomes are worth a ping; assignments and comments are the bots talking among themselves. */
+        private val ACTIVITY_KINDS = setOf("completed", "blocked")
+
 
         /** Cheap, good-enough liveness flag for the settings screen. */
         @Volatile
@@ -161,6 +163,36 @@ class LinkService : Service() {
         scope.launch { ntfyWatcher() }
         scope.launch { cronWatcher() }
         scope.launch { boardWatcher() }
+        scope.launch { decisionsWatcher() }
+    }
+
+    // ---- watcher: permission requests escalated to Robert ----
+
+    private suspend fun decisionsWatcher() = resilient("decisions") { _ ->
+        val n = prefs.currentNotifications()
+        if (n.enabled && n.watchDecisions) checkDecisions()
+        60_000L
+    }
+
+    private suspend fun checkDecisions() {
+        val team = try {
+            api.http.get("/api/plugins/bobbot-team/team")
+        } catch (e: com.bobbot.core.net.HermesHttpException) {
+            if (e.code == 404) return else throw e  // extension not installed: nothing to watch
+        }
+        val notified = prefs.notifiedDecisions.first()
+        for (r in team.list("requests")) {
+            if (r.str("status") != "needs_user") continue
+            val id = r.str("id") ?: continue
+            if (id in notified) continue
+            notifier.decisionNeeded(
+                profile = r.str("profile") ?: "a bot",
+                tool = r.str("tool") ?: "a tool",
+                reason = r.str("reason") ?: "",
+                authority = team.str("authority") ?: "default",
+            )
+            prefs.markDecisionNotified(id)
+        }
     }
 
     /** Mirror the status flow into the ongoing notification. */
@@ -352,6 +384,7 @@ class LinkService : Service() {
             if (priming || !fresh) continue
             if (at <= cursor) continue
             if (a.kind !in ACTIVITY_KINDS) continue
+            if (a.isTeamPlumbing) continue
             val from = a.from?.takeIf { it.isNotBlank() } ?: continue
             val to = a.to?.takeIf { it.isNotBlank() } ?: continue
             notifier.botToBot(from, to, a.text)

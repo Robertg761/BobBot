@@ -28,7 +28,8 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
 
     companion object {
         const val CH_BOTS = "bots"
-        const val CH_LINK = "link"
+        /** Renamed from "link" so the importance could drop to MIN; Android fixes a channel's importance at creation. */
+        const val CH_LINK = "link_quiet"
         const val CH_RELAY = "relay"
 
         /** Stable id of the foreground-service notification. */
@@ -49,18 +50,19 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             .setName("Bot messages")
             .setDescription("Replies, automation results and anything a bot pushes to you")
             .build()
-        val link = NotificationChannelCompat.Builder(CH_LINK, NotificationManager.IMPORTANCE_LOW)
+        val link = NotificationChannelCompat.Builder(CH_LINK, NotificationManager.IMPORTANCE_MIN)
             .setName("Background link")
-            .setDescription("The persistent connection to your Hermes server")
+            .setDescription("Keeps the connection to your Hermes server open. Android requires this while BobBot listens in the background; it makes no sound and shows no icon.")
             .setSound(null, null)
             .setVibrationEnabled(false)
             .setShowBadge(false)
             .build()
-        val relay = NotificationChannelCompat.Builder(CH_RELAY, NotificationManager.IMPORTANCE_DEFAULT)
-            .setName("Bot-to-bot")
-            .setDescription("Board traffic between your bots")
+        val relay = NotificationChannelCompat.Builder(CH_RELAY, NotificationManager.IMPORTANCE_LOW)
+            .setName("Bot-to-bot hand-offs")
+            .setDescription("A bot finishing or stalling on work another bot gave it")
             .build()
         manager.createNotificationChannelsCompat(listOf(bots, link, relay))
+        runCatching { manager.deleteNotificationChannel("link") }
     }
 
     // ---- public API ----
@@ -97,6 +99,23 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
         post(seq.incrementAndGet(), n)
     }
 
+    /** Your main bot escalated a specialist's permission request; only you can decide it. */
+    fun decisionNeeded(profile: String, tool: String, reason: String, authority: String) {
+        val who = com.bobbot.data.repo.BotNames.display(profile)
+        val boss = com.bobbot.data.repo.BotNames.display(authority)
+        val body = "$who wants to use $tool." + (if (reason.isNotBlank()) " $boss: $reason" else "")
+        val n = base(CH_BOTS)
+            .setContentTitle("$boss needs your decision")
+            .setContentText(body.take(120))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(null, null, team = true))
+            .build()
+        post(seq.incrementAndGet(), n)
+    }
+
     /** The result of a scheduled automation run. */
     fun automation(name: String, bot: String, output: String, ok: Boolean) {
         val body = output.ifBlank { if (ok) "finished" else "failed" }
@@ -116,10 +135,9 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
     /** The ongoing notification that keeps [LinkService] alive. */
     fun linkOngoing(status: String): Notification =
         base(CH_LINK)
-            .setContentTitle("BobBot link")
+            .setContentTitle("BobBot is listening for your bots")
             .setContentText(status)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(status))
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setOngoing(true)
             .setSilent(true)
             .setShowWhen(false)
@@ -143,12 +161,13 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
         .setColor(0xFF7C9CFF.toInt())
         .setColorized(false)
 
-    private fun openApp(sessionId: String?, profile: String?): PendingIntent? {
+    private fun openApp(sessionId: String?, profile: String?, team: Boolean = false): PendingIntent? {
         val cls = runCatching { Class.forName("com.bobbot.MainActivity") }.getOrNull() ?: return null
         val intent = Intent(ctx, cls).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
             if (sessionId != null) putExtra("open_session", sessionId)
             if (profile != null) putExtra("open_profile", profile)
+            if (team) putExtra("open_team", true)
         }
         return PendingIntent.getActivity(
             ctx,

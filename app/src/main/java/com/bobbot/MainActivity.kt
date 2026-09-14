@@ -14,7 +14,7 @@ import com.bobbot.ui.theme.BobBotTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 /** A request to open a specific chat, delivered by a notification tap or the auth deep link. */
-data class LaunchRequest(val sessionId: String?, val profile: String?, val authReturn: Boolean, val nonce: Long = System.nanoTime())
+data class LaunchRequest(val sessionId: String?, val profile: String?, val authReturn: Boolean, val team: Boolean = false, val nonce: Long = System.nanoTime())
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
         if (data != null && data.scheme == "bobbot") return LaunchRequest(null, null, authReturn = true)
         val sid = i.getStringExtra("open_session")
         val prof = i.getStringExtra("open_profile")
+        if (i.getBooleanExtra("open_team", false)) return LaunchRequest(null, null, authReturn = false, team = true)
         if (sid != null || prof != null) return LaunchRequest(sid, prof, authReturn = false)
         return null
     }

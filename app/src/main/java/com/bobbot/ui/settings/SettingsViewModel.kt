@@ -37,8 +37,9 @@ data class SettingsUiState(
     val testFailed: Boolean = false,
     // notifications
     val notificationsEnabled: Boolean = true,
-    val watchBoard: Boolean = true,
+    val watchBoard: Boolean = false,
     val watchCron: Boolean = true,
+    val watchDecisions: Boolean = true,
     // ntfy
     val ntfyServer: String = "https://ntfy.sh",
     val ntfyTopic: String = "",
@@ -83,6 +84,7 @@ class SettingsViewModel @Inject constructor(
                         notificationsEnabled = n.enabled,
                         watchBoard = n.watchBoard,
                         watchCron = n.watchCron,
+                        watchDecisions = n.watchDecisions,
                         ntfyServer = if (ntfySeeded) s.ntfyServer else n.ntfyServer,
                         ntfyTopic = if (ntfySeeded) s.ntfyTopic else n.ntfyTopic,
                         ntfyToken = if (ntfySeeded) s.ntfyToken else n.ntfyToken,
@@ -168,8 +170,8 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setNotificationsEnabled(enabled) }
     }
 
-    fun setWatch(board: Boolean? = null, cron: Boolean? = null) {
-        viewModelScope.launch { prefs.setWatch(board = board, cron = cron) }
+    fun setWatch(board: Boolean? = null, cron: Boolean? = null, decisions: Boolean? = null) {
+        viewModelScope.launch { prefs.setWatch(board = board, cron = cron, decisions = decisions) }
     }
 
     // ---- ntfy ----

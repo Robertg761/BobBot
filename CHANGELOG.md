@@ -2,6 +2,10 @@
 
 ## [1.3.1] - 2026-09-14
 
+### Changed
+- **Far fewer notifications.** Bot-to-bot board traffic is off by default and, when on, only reports a bot finishing or getting stuck on work another bot gave it. The team extension's permission-review tasks never notify. New "Decisions for you" notifications fire only when your main bot escalates a specialist's request to you, and tap through to Team & permissions.
+- The background link notification is now minimum importance: no status-bar icon, no sound, collapsed at the bottom of the shade. Android requires it while BobBot listens in the background; stopping the link from Settings removes it.
+
 ### Fixed
 - An `https://` server address no longer gets port 9119 appended. A tunnel or reverse proxy on 443 (for example a Cloudflare tunnel in front of the dashboard) now works by typing just the hostname. Plain `http://` addresses and bare hosts still default to 9119.
 

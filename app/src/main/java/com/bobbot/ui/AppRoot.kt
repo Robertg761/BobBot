@@ -53,7 +53,9 @@ fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
 
     LaunchedEffect(launch) {
         val l = launch ?: return@LaunchedEffect
-        if (setupDone && (l.sessionId != null || l.profile != null)) {
+        if (setupDone && l.team) {
+            nav.navigate(Route.Team)
+        } else if (setupDone && (l.sessionId != null || l.profile != null)) {
             nav.navigate(Route.Chat(sessionId = l.sessionId, profile = l.profile, mainConversation = l.sessionId == null))
         }
         onLaunchConsumed()
