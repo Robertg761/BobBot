@@ -48,7 +48,6 @@ import com.bobbot.ui.components.BotAvatar
 import com.bobbot.ui.components.EmptyState
 import com.bobbot.ui.components.LoadingRow
 import com.bobbot.ui.components.Pill
-import com.bobbot.ui.components.StatusDot
 import com.bobbot.data.repo.botName
 import com.bobbot.ui.theme.BobColors
 import com.bobbot.ui.theme.botColor
@@ -136,7 +135,7 @@ fun BotsScreen(
                         Text("Bots", style = MaterialTheme.typography.displaySmall, color = BobColors.Text)
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            "Tap a bot to continue your conversation",
+                            "Bots start when you chat. Tap to continue.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = BobColors.TextFaint,
                         )
@@ -234,15 +233,6 @@ private fun BotCard(bot: Bot, onOpen: () -> Unit, onChat: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Pill("${bot.skillCount} skill${if (bot.skillCount == 1) "" else "s"}", color = BobColors.TextMuted)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatusDot(bot.gatewayRunning)
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        if (bot.gatewayRunning) "Gateway up" else "Gateway down",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = BobColors.TextFaint,
-                    )
-                }
             }
             Box(Modifier.weight(1f))
             IconButton(onClick = onOpen) { Icon(Icons.Outlined.Settings, "Bot settings", tint = BobColors.TextMuted) }

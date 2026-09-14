@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.2] - 2026-09-14
+
+### Fixed
+- Persona templates no longer replace a bot's chosen name with "Persona". New personas include the bot's name, and existing generic headings fall back to the profile name.
+- Bot cards no longer show the messaging gateway as a chat availability indicator. Direct chats start on demand.
+
 ## [1.1.1] - 2026-09-14
 
 ### Fixed

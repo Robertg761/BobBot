@@ -56,8 +56,7 @@ class BotsRepository @Inject constructor(private val api: HermesApi, private val
                 // Omit keep_skills to retain inherited skills. Hermes expects a list, not a flag.
             ),
         )
-        val persona = soul?.trim()?.takeIf { it.isNotBlank() }
-            ?: "# $name\n\nYou are $name, a specialist assistant. ${description.trim()}\nYou have your own identity and report to the team's authority bot."
+        val persona = newBotPersona(name, description, soul)
         run {
             try { api.setSoul(name, persona) }
             catch (e: Exception) {

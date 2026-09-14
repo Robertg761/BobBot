@@ -77,7 +77,6 @@ import com.bobbot.ui.components.EmptyState
 import com.bobbot.ui.components.LoadingRow
 import com.bobbot.ui.components.Pill
 import com.bobbot.ui.components.SectionHeader
-import com.bobbot.ui.components.StatusDot
 import com.bobbot.ui.models.ModelPickerSheet
 import com.bobbot.ui.models.modelSpec
 import com.bobbot.data.repo.botName
@@ -702,7 +701,6 @@ private fun HeaderCard(
                 val modelLabel = bot?.model.orEmpty()
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (modelLabel.isNotBlank()) Pill(modelLabel, color = BobColors.Accent, icon = Icons.Outlined.Memory)
-                    StatusDot(bot?.gatewayRunning)
                 }
             }
         }

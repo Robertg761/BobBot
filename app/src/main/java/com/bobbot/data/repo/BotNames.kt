@@ -27,7 +27,7 @@ object BotNames {
 
     fun setNicknames(map: Map<String, String>) { nicknames.value = map; recompute() }
 
-    fun display(profile: String): String = _names.value[profile]?.takeIf { it.isNotBlank() } ?: profile
+    fun display(profile: String): String = _names.value[profile]?.takeIf { it.isNotBlank() } ?: fallback(profile)
 
     private fun recompute() {
         val out = mutableMapOf<String, String>()
@@ -36,19 +36,26 @@ object BotNames {
         _names.value = out
     }
 
-    /** First markdown heading of a SOUL.md, e.g. "# Clove" -> "Clove". */
+    fun fallback(profile: String): String = profile.replaceFirstChar { it.titlecase() }
+
+    /** Only a document title can name a bot. Template section labels are not names. */
     fun headingOf(soul: String?): String? = soul?.lineSequence()
         ?.map { it.trim() }
-        ?.firstOrNull { it.startsWith("#") }
-        ?.trimStart('#')?.trim()
-        ?.takeIf { it.isNotBlank() && it.length <= 40 }
+        ?.firstOrNull { it.isNotBlank() }
+        ?.takeIf { it.startsWith("# ") }
+        ?.removePrefix("# ")?.trim()
+        ?.takeIf { it.isNotBlank() && it.length <= 40 && !isGenericHeading(it) }
+
+    internal fun isGenericHeading(heading: String): Boolean = heading.lowercase() in setOf(
+        "persona", "soul", "soul.md", "identity", "personality", "instructions", "voice", "rules",
+    )
 }
 
 /** Display name for a profile, recomposing when names load or change. */
 @Composable
 fun botName(profile: String): String {
     val names by BotNames.names.collectAsState()
-    return names[profile]?.takeIf { it.isNotBlank() } ?: profile
+    return names[profile]?.takeIf { it.isNotBlank() } ?: BotNames.fallback(profile)
 }
 
 @Composable
