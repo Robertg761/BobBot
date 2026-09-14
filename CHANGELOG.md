@@ -7,6 +7,7 @@
 - The background link notification is now minimum importance: no status-bar icon, no sound, collapsed at the bottom of the shade. Android requires it while BobBot listens in the background; stopping the link from Settings removes it.
 
 ### Fixed
+- Streaming replies no longer jitter. The chat snaps to the newest text without animation while a reply streams, animates only when a new message arrives, and stops following the moment you scroll up, until you return to the bottom. Group chats behave the same way.
 - An `https://` server address no longer gets port 9119 appended. A tunnel or reverse proxy on 443 (for example a Cloudflare tunnel in front of the dashboard) now works by typing just the hostname. Plain `http://` addresses and bare hosts still default to 9119.
 
 ## [1.3.0] - 2026-09-14

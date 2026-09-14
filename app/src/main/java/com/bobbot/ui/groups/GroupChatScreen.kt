@@ -166,8 +166,10 @@ fun GroupChatScreen(roomId: String, onBack: () -> Unit, onOpenBot: (String) -> U
     val listState = rememberLazyListState()
     val messages = ui.events.filter { it.isMessage && it.text.isNotBlank() }
     val extra = (if (ui.working) 1 else 0) + ui.actions.size + 1
+    val follow = com.bobbot.ui.chat.rememberFollowBottom(listState)
     LaunchedEffect(messages.size, ui.working, ui.actions.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size + extra)
+        if (messages.lastOrNull()?.fromUser == true) follow.value = true
+        if (follow.value && messages.isNotEmpty()) listState.animateScrollToItem(messages.size + extra)
     }
     val members = ui.room?.members ?: emptyList()
     val title = ui.room?.name?.ifBlank { null } ?: members.joinToString(", ") { BotNames.display(it) }.ifBlank { "Group" }

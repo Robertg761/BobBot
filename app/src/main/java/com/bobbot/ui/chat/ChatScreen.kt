@@ -123,10 +123,17 @@ fun ChatScreen(
     val showTyping = session?.isBusy == true && !(lastAssistant != null && lastAssistant.streaming && lastAssistant.text.isNotBlank())
     val prompt = session?.approval != null || session?.clarify != null || session?.secret != null
     val extra = (if (showTyping) 1 else 0) + (if (prompt) 1 else 0) + 1
+    val lastIndex = (if (items.isEmpty()) 1 else 0) + items.size + extra - 1
 
-    // Follow the stream.
-    LaunchedEffect(items.size, lastAssistant?.text?.length, showTyping, prompt) {
-        if (items.isNotEmpty() || showTyping || prompt) listState.animateScrollToItem(items.size + extra)
+    // Follow the conversation like a messages app: animate once when something new arrives, snap
+    // without animation while a reply streams, and stop following as soon as the user scrolls up.
+    val follow = rememberFollowBottom(listState)
+    LaunchedEffect(items.size, showTyping, prompt) {
+        if (items.lastOrNull() is ChatItem.User) follow.value = true
+        if (follow.value && lastIndex >= 0) listState.animateScrollToItem(lastIndex)
+    }
+    LaunchedEffect(lastAssistant?.text?.length) {
+        if (follow.value && lastAssistant?.streaming == true && lastIndex >= 0) listState.scrollToItem(lastIndex)
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(vm::attach) }
@@ -276,6 +283,30 @@ fun ChatScreen(
             dismissButton = { TextButton(onClick = { renaming = false }) { Text("Cancel") } },
         )
     }
+}
+
+/**
+ * Whether the list should keep pinning to the newest entry. Starts true; a drag by the user turns it
+ * off unless the drag ends at the bottom, so reading back through history is never yanked away.
+ */
+@Composable
+fun rememberFollowBottom(listState: androidx.compose.foundation.lazy.LazyListState): androidx.compose.runtime.MutableState<Boolean> {
+    val follow = remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is androidx.compose.foundation.interaction.DragInteraction.Start -> follow.value = false
+                is androidx.compose.foundation.interaction.DragInteraction.Stop,
+                is androidx.compose.foundation.interaction.DragInteraction.Cancel -> if (!listState.canScrollForward) follow.value = true
+            }
+        }
+    }
+    LaunchedEffect(listState) {
+        // A fling that lands at the bottom also resumes following.
+        androidx.compose.runtime.snapshotFlow { listState.isScrollInProgress to listState.canScrollForward }
+            .collect { (moving, canForward) -> if (!moving && !canForward) follow.value = true }
+    }
+    return follow
 }
 
 /** Two adjacent entries "belong together" when the same side sent both bubbles. */
