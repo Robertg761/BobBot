@@ -38,8 +38,8 @@ android {
         applicationId = "com.bobbot"
         minSdk = 26
         targetSdk = 37
-        versionCode = 14
-        versionName = "1.3.5"
+        versionCode = 15
+        versionName = "1.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "GITHUB_OWNER", "\"Robertg761\"")

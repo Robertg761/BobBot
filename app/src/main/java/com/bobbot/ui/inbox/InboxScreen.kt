@@ -146,6 +146,8 @@ fun InboxScreen(actions: InboxActions, vm: InboxViewModel = hiltViewModel()) {
             if (ui.teammateMessaging == false && ui.bots.size >= 2 && ui.query.isBlank()) {
                 TeammateBanner(busy = ui.enablingTeammates, onEnable = vm::enableTeammateMessaging)
             }
+            // One-time ask: without the exemption Samsung puts the link to sleep and replies stop arriving.
+            if (ui.query.isBlank()) com.bobbot.ui.settings.BatteryExemptionBanner()
 
             val rows = ui.visible
             when {

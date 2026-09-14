@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.4.0] - 2026-09-14
+
+### Changed
+- **Chats read like conversations.** A bot's working steps (tool calls, thinking) fold into one quiet row, "Worked for 40s · 5 steps", that expands on tap. While the bot is busy the row shows the current step. Errors stay visible on their own line.
+- **Decide permissions from the notification.** "Clove needs your decision" now carries Allow, Allow here (this tool for the rest of the conversation) and Deny. The result replaces the notification with a short confirmation.
+- **Bots are Android conversations.** Each bot has a long-lived conversation shortcut, so its notifications appear in the Conversations section, can be marked priority, and the bot can be pinned to the home screen.
+- **A banner when a different bot replies.** While you are reading one chat, a reply in another shows a banner at the top that opens that chat. Notifications stay quiet while the app is open.
+- **Share into a bot.** BobBot appears in Android's share sheet for text and images. Pick a bot; the text lands in the composer and images are attached, ready to send.
+- **Pair by QR code.** The BobBot team tab in the Hermes dashboard shows a QR code. Scan it with the phone camera to fill in the server address; if BobBot is already set up it offers to switch servers.
+- **Long-press a message** to copy it, share it, or send it again.
+- The chat header no longer shows the model id. It shows a status only while the bot is working or waiting; the model stays in the ⋮ menu.
+- **Keep the link alive on Samsung.** A one-time card in the inbox (and a row in Settings) asks Android to exempt BobBot from battery optimisation, so the background link is not put to sleep.
+- Settings explains how to switch off the "Listening for your bots" notification on Android 13 and later, with a button that opens the right screen. BobBot keeps listening.
+
+### Team extension 0.3.3
+- New dashboard route that renders the pairing QR code (self-contained encoder, no new dependencies).
+
 ## [1.3.5] - 2026-09-14
 
 ### Fixed

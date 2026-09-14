@@ -113,7 +113,7 @@ fun BatteryExemptionCard(onDismiss: () -> Unit) {
         Text("Keep BobBot listening", color = BobColors.Text, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Android puts sleeping apps to sleep, and your bots' messages stop arriving. Letting BobBot run in the background keeps the link to your server open.",
+            "Android puts apps it thinks are unused to sleep, and then your bots' messages stop arriving. Letting BobBot run in the background keeps the link to your server open.",
             color = BobColors.TextMuted,
             style = MaterialTheme.typography.bodySmall,
         )

@@ -84,10 +84,12 @@ fun MessageItem(
     groupedBelow: Boolean = false,
     /** Long-press on a bubble; null in places where message actions make no sense. */
     onLongPress: ((ChatItem) -> Unit)? = null,
+    /** The reply's thinking is shown inside the work row just above it instead of as its own toggle. */
+    hideReasoning: Boolean = false,
 ) {
     when (item) {
         is ChatItem.User -> UserBubble(item, groupedAbove, groupedBelow, onLongPress)
-        is ChatItem.Assistant -> AssistantBubble(item, profile, groupedAbove, groupedBelow, onLongPress)
+        is ChatItem.Assistant -> AssistantBubble(item, profile, groupedAbove, groupedBelow, onLongPress, hideReasoning)
         is ChatItem.Tool -> ActivityLine(item)
         is ChatItem.System -> SystemLine(item)
         is ChatItem.Delegation -> DelegationCard(item, profile)
@@ -249,25 +251,9 @@ private fun UserBubble(m: ChatItem.User, groupedAbove: Boolean, groupedBelow: Bo
 }
 
 @Composable
-private fun AssistantBubble(m: ChatItem.Assistant, profile: String, groupedAbove: Boolean, groupedBelow: Boolean, onLongPress: ((ChatItem) -> Unit)? = null) {
-    var showReasoning by remember { mutableStateOf(false) }
+private fun AssistantBubble(m: ChatItem.Assistant, profile: String, groupedAbove: Boolean, groupedBelow: Boolean, onLongPress: ((ChatItem) -> Unit)? = null, hideReasoning: Boolean = false) {
     Column(Modifier.fillMaxWidth().padding(end = 40.dp), horizontalAlignment = Alignment.Start) {
-        if (m.reasoning.isNotBlank()) {
-            Row(
-                Modifier.clip(RoundedCornerShape(10.dp)).clickable { showReasoning = !showReasoning }.padding(horizontal = 6.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Outlined.Psychology, null, tint = BobColors.Violet, modifier = Modifier.size(13.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(if (m.streaming && m.text.isBlank()) "Thinking…" else "Thought process", style = MaterialTheme.typography.labelSmall, color = BobColors.Violet)
-                Icon(if (showReasoning) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, tint = BobColors.Violet, modifier = Modifier.size(14.dp))
-            }
-            AnimatedVisibility(showReasoning) {
-                Box(Modifier.widthIn(max = BubbleMaxWidth).padding(bottom = 6.dp).clip(RoundedCornerShape(12.dp)).background(BobColors.VioletSoft).padding(10.dp)) {
-                    Text(m.reasoning, color = BobColors.TextMuted, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
+        if (m.reasoning.isNotBlank() && !hideReasoning) ReasoningToggle(m.reasoning, thinking = m.streaming && m.text.isBlank())
         if (m.text.isNotBlank()) {
             Box(
                 Modifier.widthIn(max = BubbleMaxWidth)
@@ -404,7 +390,7 @@ private fun DelegationCard(d: ChatItem.Delegation, profile: String) {
  * very same step rows the transcript used to show inline, so nothing is lost, only put away.
  */
 @Composable
-fun WorkRow(entry: Entry.Run, profile: String, live: Boolean) {
+fun WorkRow(entry: Entry.Run, profile: String, live: Boolean, trailingReasoning: String = "") {
     // Saved per run, keyed by its first item, so scrolling away does not re-collapse what you opened.
     var open by rememberSaveable(key = "work-" + entry.key) { mutableStateOf(false) }
     val duration = remember(entry.items) { runDurationS(entry.items) }
@@ -418,7 +404,7 @@ fun WorkRow(entry: Entry.Run, profile: String, live: Boolean) {
             Spacer(Modifier.width(6.dp))
             Column(Modifier.weight(1f, fill = false)) {
                 Text(
-                    workedLabel(entry.items.size, duration, live),
+                    workedLabel(entry.items.size + (if (trailingReasoning.isNotBlank()) 1 else 0), duration, live),
                     style = MaterialTheme.typography.labelMedium, color = if (live) BobColors.Amber else BobColors.TextFaint,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
@@ -433,6 +419,30 @@ fun WorkRow(entry: Entry.Run, profile: String, live: Boolean) {
         AnimatedVisibility(open) {
             Column(Modifier.padding(start = 4.dp, top = 2.dp)) {
                 entry.items.forEach { step -> key(step.id) { MessageItem(step, profile) } }
+                // The thinking that produced the reply that follows is the run's last step.
+                if (trailingReasoning.isNotBlank()) ReasoningToggle(trailingReasoning)
+            }
+        }
+    }
+}
+
+/** The bot's thinking, folded away behind one small line. */
+@Composable
+fun ReasoningToggle(reasoning: String, thinking: Boolean = false) {
+    var showReasoning by remember { mutableStateOf(false) }
+    Column {
+        Row(
+            Modifier.clip(RoundedCornerShape(10.dp)).clickable { showReasoning = !showReasoning }.padding(horizontal = 6.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Psychology, null, tint = BobColors.Violet, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(if (thinking) "Thinking…" else "Thought process", style = MaterialTheme.typography.labelSmall, color = BobColors.Violet)
+            Icon(if (showReasoning) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, tint = BobColors.Violet, modifier = Modifier.size(14.dp))
+        }
+        AnimatedVisibility(showReasoning) {
+            Box(Modifier.widthIn(max = BubbleMaxWidth).padding(bottom = 6.dp).clip(RoundedCornerShape(12.dp)).background(BobColors.VioletSoft).padding(10.dp)) {
+                Text(reasoning, color = BobColors.TextMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

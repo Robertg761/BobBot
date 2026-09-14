@@ -140,9 +140,18 @@ fun ChatScreen(
     // without animation while a reply streams, and stop following as soon as the user scrolls up.
     val follow = rememberFollowBottom(listState)
     // Markdown lays out a beat after the item appears, so aim past the end; the list clamps to the real bottom.
+    var opened by remember { mutableStateOf(false) }
     LaunchedEffect(items.size, showTyping, prompt) {
         if (items.lastOrNull() is ChatItem.User) follow.value = true
-        if (follow.value && lastIndex >= 0) listState.animateScrollToItem(lastIndex, scrollOffset = Int.MAX_VALUE / 2)
+        if (!follow.value || lastIndex < 0) return@LaunchedEffect
+        // First load snaps; later arrivals animate. Either way, long markdown bubbles finish measuring a
+        // frame or two later and push the end down, so settle again once they have.
+        if (!opened) { opened = true; listState.scrollToItem(lastIndex, scrollOffset = Int.MAX_VALUE / 2) }
+        else listState.animateScrollToItem(lastIndex, scrollOffset = Int.MAX_VALUE / 2)
+        repeat(3) {
+            androidx.compose.runtime.withFrameNanos { }
+            if (follow.value && listState.canScrollForward) listState.scrollToItem(lastIndex, scrollOffset = Int.MAX_VALUE / 2)
+        }
     }
     LaunchedEffect(lastAssistant?.text?.length) {
         if (follow.value && lastAssistant?.streaming == true && lastIndex >= 0) listState.scrollToItem(lastIndex, scrollOffset = Int.MAX_VALUE / 2)
@@ -251,9 +260,12 @@ fun ChatScreen(
                         when (entry) {
                             is Entry.Run -> {
                                 val live = session?.isBusy == true && i == entries.lastIndex
+                                // A reply's thinking belongs to the work that led to it, not above the bubble.
+                                val reasoningAfter = ((entries.getOrNull(i + 1) as? Entry.Single)?.item as? ChatItem.Assistant)
+                                    ?.takeIf { it.text.isNotBlank() }?.reasoning.orEmpty()
                                 item(key = entry.key) {
                                     Spacer(Modifier.height(if (i == 0) 0.dp else gapBetween(false)))
-                                    WorkRow(entry, profile, live)
+                                    WorkRow(entry, profile, live, trailingReasoning = reasoningAfter)
                                 }
                             }
                             is Entry.Single -> {
@@ -266,7 +278,8 @@ fun ChatScreen(
                                     val at = msg.at
                                     if (at != null && startsNewDay(timedBefore, msg)) DaySeparator(dayLabel(at))
                                     else Spacer(Modifier.height(if (i == 0) 0.dp else gapBetween(groupedAbove)))
-                                    MessageItem(msg, profile, groupedAbove, groupedBelow, onLongPress = { if (messageText(it).isNotBlank()) actionsFor = it })
+                                    val afterRun = entries.getOrNull(i - 1) is Entry.Run
+                                    MessageItem(msg, profile, groupedAbove, groupedBelow, onLongPress = { if (messageText(it).isNotBlank()) actionsFor = it }, hideReasoning = afterRun && msg is ChatItem.Assistant && msg.text.isNotBlank())
                                     val settled = msg is ChatItem.User || msg is ChatItem.Teammate || (msg is ChatItem.Assistant && !msg.streaming && msg.text.isNotBlank())
                                     if (at != null && !groupedBelow && settled) TimeLabel(at, mine = msg is ChatItem.User)
                                 }
