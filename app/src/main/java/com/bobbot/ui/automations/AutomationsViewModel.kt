@@ -61,7 +61,12 @@ class AutomationsViewModel @Inject constructor(
         val targets = runCatching { automations.deliveryTargets() }.getOrDefault(emptyList())
         // ntfy is the push-to-this-phone target and local is always valid, so make sure both are offered.
         val merged = buildList {
-            addAll(targets)
+            // Bot chats first: that is where results are read in this app.
+            addAll(targets.filter { it.id.startsWith("bot-chat:") }.map { t ->
+                val p = t.id.removePrefix("bot-chat:")
+                DeliveryTarget(t.id, "${com.bobbot.data.repo.BotNames.display(p)}'s chat (in BobBot)")
+            })
+            addAll(targets.filterNot { it.id.startsWith("bot-chat:") })
             if (targets.none { it.id == "ntfy" }) add(DeliveryTarget("ntfy", "ntfy (push to this phone)"))
             if (targets.none { it.id == "local" }) add(DeliveryTarget("local", "Local (no delivery)"))
         }

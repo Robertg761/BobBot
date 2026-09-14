@@ -236,7 +236,9 @@ fun AutomationsScreen(onBack: () -> Unit, onChat: (profile: String) -> Unit) {
             initialName = "",
             initialPrompt = "",
             initialSchedule = ScheduleDraft(),
-            initialDeliver = ui.deliveryTargets.firstOrNull { it.id == "ntfy" }?.id ?: ui.deliveryTargets.firstOrNull()?.id,
+            // Results come back to the bot's own chat by default; that is where you read them in BobBot.
+            initialDeliver = ui.botNames.firstOrNull()?.let { p -> ui.deliveryTargets.firstOrNull { it.id == "bot-chat:$p" }?.id }
+                ?: ui.deliveryTargets.firstOrNull { it.id == "ntfy" }?.id ?: ui.deliveryTargets.firstOrNull()?.id,
             initialProfile = ui.botNames.firstOrNull(),
             targets = ui.deliveryTargets,
             botNames = ui.botNames,

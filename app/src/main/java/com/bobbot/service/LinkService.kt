@@ -329,9 +329,22 @@ class LinkService : Service() {
             if (priming || firstSightOfJob) continue
 
             val failed = (job.lastStatus ?: "").equals("error", ignoreCase = true) || !job.lastError.isNullOrBlank()
+            val targets = job.deliver.split(',').map { it.trim().lowercase() }.filter { it.isNotBlank() }
+            // A result delivered into a bot's chat lands in this app: notify like a message from that bot,
+            // unless that chat is attached here already, in which case the completion watcher covers it.
+            val botChat = targets.firstOrNull { it == "bot-chat" || it.startsWith("bot-chat:") }
+            if (botChat != null && !failed) {
+                val target = botChat.substringAfter(':', job.profile).ifBlank { job.profile }
+                if (targets.none { it == "ntfy" } && !chatIsAttached(target)) {
+                    val run = runCatching { automations.runs(job, 1).firstOrNull() }.getOrNull()
+                    val output = run?.output?.takeIf { it.isNotBlank() && !it.contains("[SILENT]") } ?: continue
+                    notifier.botMessage(bot = target, title = job.name, text = output, sessionId = null, profile = target)
+                }
+                continue
+            }
             // Hermes already delivers these runs to a real channel (Telegram, Discord, ntfy…);
             // repeating them here is just noise. Failures are still worth a heads-up.
-            val deliversElsewhere = job.deliver.isNotBlank() && !job.deliver.equals("local", ignoreCase = true)
+            val deliversElsewhere = targets.isNotEmpty() && targets.none { it == "local" }
             if (deliversElsewhere && !failed) continue
 
             val run = runCatching { automations.runs(job, 1).firstOrNull() }.getOrNull()
@@ -345,6 +358,12 @@ class LinkService : Service() {
             notifier.automation(job.name, job.profile, output, ok = true)
         }
         if (changed) prefs.setLastCronSeen(encodeMap(seen))
+    }
+
+    /** True when this app currently holds the profile's Bot Chat, so live events already reach it. */
+    private suspend fun chatIsAttached(profile: String): Boolean {
+        val stored = runCatching { chat.findMainConversation(profile) }.getOrNull() ?: return false
+        return chat.liveFor(stored)?.let { chat.state(it) } != null
     }
 
     private fun decodeMap(raw: String): Map<String, String> {

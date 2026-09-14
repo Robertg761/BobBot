@@ -1,5 +1,5 @@
 name: bobbot-team
-version: "0.3.0"
+version: "0.3.1"
 description: "Clove task coordination, bot creation, teammate messaging and exact-action permission review for BobBot."
 hooks:
   - pre_tool_call

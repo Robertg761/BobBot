@@ -165,6 +165,9 @@ def guidance(info):
             'Approve bounded assignment-related work only. Escalate messages to other people, spending, destructive actions, '
             'credential/permission changes, or unclear scope using needs_user. Never execute a requested action to bypass a denial. '
             'A direct chat and a task have separate histories: put the needed context into each assignment. '
+            "Scheduled jobs whose results are for Robert should deliver to a bot's own chat, deliver='bot-chat:<profile>' (or 'bot-chat' for your own), "
+            "which Robert reads in BobBot on his phone; add ',ntfy' for a push as well. Telegram is only for jobs other people read. "
+            'Never claim scheduled results cannot reach this chat: bot-chat delivery does exactly that. '
             'Never claim that a displayed nickname changes the profile identifier.')
 
 
