@@ -43,8 +43,12 @@ Bot Mode on or off for one profile, which BobBot uses as well as the gateway's
   and conversation or board task. It expires after one hour. Changed arguments,
   another profile, or a second use need another decision.
 - The hook blocks the initial action and creates a durable review task for Clove.
-  Board work waits on that task as a dependency. Direct and group conversations
-  can retry after the decision; their current turn is not silently replayed.
+  Board work waits on that task as a dependency. A direct conversation is not
+  replayed: instead the decision is delivered into the specialist's Bot Chat as a
+  message from the authority, and the bot retries the exact action on that turn.
+  Requests raised from a task chat still need a manual retry there.
+- Pure lookups never need review: `tool_search`, `tool_describe`, and
+  `cronjob_manage` with `action=list`, on top of the `READ_TOOLS` set.
 - Clove uses `team_permissions` and `team_decide`. `approved` and `denied` finish
   the permission review; `needs_user` parks it until Robert decides in BobBot.
 - Clove's decision does not bypass Hermes' native approval checks. The policy
