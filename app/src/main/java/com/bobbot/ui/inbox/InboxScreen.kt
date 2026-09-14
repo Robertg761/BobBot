@@ -80,6 +80,7 @@ data class InboxActions(
     val newBot: () -> Unit,
     val newGroup: () -> Unit,
     val openNetwork: () -> Unit,
+    val openTeam: () -> Unit,
     val openAutomations: () -> Unit,
     val openSettings: () -> Unit,
 )
@@ -119,6 +120,11 @@ fun InboxScreen(actions: InboxActions, vm: InboxViewModel = hiltViewModel()) {
                     IconButton(onClick = { showMenu = true }) { Icon(Icons.Rounded.MoreVert, "More", tint = BobColors.TextMuted) }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }, containerColor = BobColors.SurfaceRaised) {
                         DropdownMenuItem(text = { Text("Bot network") }, leadingIcon = { Icon(Icons.Outlined.Hub, null) }, onClick = { showMenu = false; actions.openNetwork() })
+                        DropdownMenuItem(
+                            text = { Text("Team & permissions") }, leadingIcon = { Icon(Icons.Outlined.Group, null) },
+                            trailingIcon = { val n = ui.rows.count { it.presence == Presence.WAITING }; if (n > 0) Text("$n", color = BobColors.Rose) },
+                            onClick = { showMenu = false; actions.openTeam() },
+                        )
                         DropdownMenuItem(text = { Text("Automations") }, leadingIcon = { Icon(Icons.Outlined.Schedule, null) }, onClick = { showMenu = false; actions.openAutomations() })
                         DropdownMenuItem(text = { Text("Settings") }, leadingIcon = { Icon(Icons.Outlined.Settings, null) }, onClick = { showMenu = false; actions.openSettings() })
                     }

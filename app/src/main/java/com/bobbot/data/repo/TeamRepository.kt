@@ -23,6 +23,8 @@ data class TeamRequest(
     val tool: String,
     val args: Map<String, String>,
     val task: String,
+    /** The stored session id the request came from; blank for board tasks. */
+    val session: String = "",
     val status: String,      // pending | needs_user | approved | denied | consumed
     val reason: String,
     val reviewer: String,
@@ -60,6 +62,7 @@ data class TeamRequest(
             tool = j.str("tool") ?: "tool",
             args = parseArgs(j.str("args")),
             task = j.str("task") ?: "",
+            session = j.str("session") ?: "",
             status = j.str("status") ?: "pending",
             reason = j.str("reason") ?: "",
             reviewer = j.str("reviewer") ?: "",

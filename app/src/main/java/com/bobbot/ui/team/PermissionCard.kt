@@ -55,6 +55,8 @@ fun PermissionCard(
     busy: Boolean,
     onDecide: (choice: String, scope: String) -> Unit,
     showHistory: Boolean = false,
+    /** The stored id of the chat this card is shown in, to warn when the request came from another one. */
+    currentSession: String? = null,
 ) {
     val who = botName(request.profile)
     val boss = botName(authority)
@@ -77,6 +79,7 @@ fun PermissionCard(
                     when {
                         request.needsYou -> "$boss asked you to decide"
                         request.waitingForAuthority -> "$boss is reviewing"
+                        request.expired && request.status == "approved" -> "Allowed, but not used in time"
                         request.expired -> "Expired without a decision"
                         request.status == "consumed" -> "Allowed once and used"
                         request.status == "approved" && request.scope == "tool" -> "Allowed for that conversation"
@@ -130,9 +133,11 @@ fun PermissionCard(
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = { onDecide("denied", "exact") }, enabled = !busy) { Text("Deny", color = BobColors.Rose) }
                 }
+                val elsewhere = currentSession != null && request.task.isBlank() && request.session.isNotBlank() && request.session != currentSession
                 Text(
-                    "Allow: this once. Allow ${request.tool} here: any use of that tool in this conversation for 8 hours. Hermes' own approval rules still apply.",
-                    style = MaterialTheme.typography.labelSmall, color = BobColors.TextFaint,
+                    (if (elsewhere) "Asked from one of $who's task chats: after you decide, tell it there to try again. " else "") +
+                        "Allow: this once. Allow ${request.tool} here: any use of that tool in this conversation for 8 hours. Hermes' own approval rules still apply.",
+                    style = MaterialTheme.typography.labelSmall, color = if (elsewhere) BobColors.Amber else BobColors.TextFaint,
                 )
             }
         }

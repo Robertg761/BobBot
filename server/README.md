@@ -48,7 +48,10 @@ Bot Mode on or off for one profile, which BobBot uses as well as the gateway's
   Board work waits on that task as a dependency. A direct conversation is not
   replayed: instead the decision is delivered into the specialist's Bot Chat as a
   message from the authority, and the bot retries the exact action on that turn.
-  Requests raised from a task chat still need a manual retry there.
+  Requests raised from a task chat still need a manual retry there. The retry runs as a
+  Hermes CLI turn unless a surface (BobBot, the desktop) holds the bot's chat open, in
+  which case it runs there; decide from inside the bot's chat in BobBot when the action
+  is one Hermes itself will ask about, so that prompt reaches your phone.
 - Pure lookups never need review: `tool_search`, `tool_describe`, and
   `cronjob_manage` with `action=list`, on top of the `READ_TOOLS` set.
 - Clove uses `team_permissions` and `team_decide`. `approved` and `denied` finish

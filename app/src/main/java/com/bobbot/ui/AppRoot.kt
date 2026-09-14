@@ -87,6 +87,7 @@ fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
                         newBot = { nav.navigate(Route.NewBot) },
                         newGroup = { nav.navigate(Route.NewGroup) },
                         openNetwork = { nav.navigate(Route.Board) },
+                        openTeam = { nav.navigate(Route.Team) },
                         openAutomations = { nav.navigate(Route.Automations) },
                         openSettings = { nav.navigate(Route.Settings) },
                     ),
@@ -100,6 +101,7 @@ fun AppRoot(launch: LaunchRequest?, onLaunchConsumed: () -> Unit) {
                     onOpenProfile = { nav.navigate(Route.BotDetail(it)) },
                     onNewTaskChat = { nav.navigate(Route.Chat(null, it)) },
                     onOpenNetwork = { nav.navigate(Route.Board) },
+                    onOpenTeam = { nav.navigate(Route.Team) },
                 )
             }
             composable<Route.Group> { entry ->

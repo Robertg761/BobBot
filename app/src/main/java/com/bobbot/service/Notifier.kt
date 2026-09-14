@@ -111,7 +111,7 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
-            .setContentIntent(openApp(null, null, team = true))
+            .setContentIntent(openApp(null, profile))
             .build()
         post(seq.incrementAndGet(), n)
     }

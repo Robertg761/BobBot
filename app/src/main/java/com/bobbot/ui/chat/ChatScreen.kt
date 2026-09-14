@@ -101,6 +101,7 @@ fun ChatScreen(
     onOpenProfile: (profile: String) -> Unit,
     onNewTaskChat: (profile: String) -> Unit,
     onOpenNetwork: () -> Unit = {},
+    onOpenTeam: () -> Unit = {},
     vm: ChatViewModel = hiltViewModel(),
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -214,8 +215,18 @@ fun ChatScreen(
                     if (ui.permissions.isNotEmpty()) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             ui.permissions.take(3).forEach { r ->
-                                com.bobbot.ui.team.PermissionCard(r, ui.authority, busy = false, onDecide = { c, sc -> vm.decidePermission(r.id, c, sc) })
+                                com.bobbot.ui.team.PermissionCard(r, ui.authority, busy = false, onDecide = { c, sc -> vm.decidePermission(r.id, c, sc) }, currentSession = session?.storedId)
                             }
+                        }
+                    }
+                    if (profile == ui.authority && (ui.waitingForAuthority > 0 || ui.waitingForYou > 0)) {
+                        Row(
+                            Modifier.fillMaxWidth().clickable(onClick = onOpenTeam).padding(horizontal = 20.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            com.bobbot.ui.team.PermissionSummaryLine(ui.waitingForYou, ui.waitingForAuthority, ui.authority, color = if (ui.waitingForYou > 0) BobColors.Rose else BobColors.Amber)
+                            Spacer(Modifier.weight(1f))
+                            Text("Review", style = MaterialTheme.typography.labelSmall, color = BobColors.Accent)
                         }
                     }
                     LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp), modifier = Modifier.fillMaxSize()) {

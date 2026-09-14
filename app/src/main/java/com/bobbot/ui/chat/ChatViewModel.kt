@@ -45,6 +45,9 @@ data class ChatUi(
     /** Team permission requests this bot is currently stopped on. */
     val permissions: List<com.bobbot.data.repo.TeamRequest> = emptyList(),
     val authority: String = "default",
+    /** Across the whole team: shown in the authority's chat so you can see what it is sitting on. */
+    val waitingForAuthority: Int = 0,
+    val waitingForYou: Int = 0,
 )
 
 @HiltViewModel
@@ -118,7 +121,12 @@ class ChatViewModel @Inject constructor(
     suspend fun loadPermissions() {
         val p = profile
         val state = runCatching { team.refresh() }.getOrNull() ?: return
-        _ui.update { it.copy(permissions = if (state.installed) state.openFor(p) else emptyList(), authority = state.authority) }
+        _ui.update {
+            it.copy(
+                permissions = if (state.installed) state.openFor(p) else emptyList(), authority = state.authority,
+                waitingForAuthority = if (state.installed) state.waiting.size else 0, waitingForYou = if (state.installed) state.needingYou.size else 0,
+            )
+        }
     }
 
     fun decidePermission(id: String, choice: String, scope: String) {

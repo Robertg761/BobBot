@@ -7,6 +7,7 @@
 - **Decisions have a scope.** "Allow" is this action once; "Allow &lt;tool&gt; here" lets the bot use that tool for the rest of the conversation (8 hours), so it is not stopped again for every read. The authority bot has the same choice and is told to use it for read-only or clearly repeated work.
 - **Bots pick up where they left off.** A decision is delivered into the bot's chat as a message from the authority and it retries on its own; pure lookups (tool search, tool descriptions, listing jobs) no longer need review at all. Requires team extension 0.3.0.
 - Hermes' own tool-approval prompts read "Allow", "Allow in this chat", "Always allow", "Deny".
+- Team & permissions is in the inbox's ⋮ menu, with a count when something needs you; a decision notification opens the bot's chat, where the card is. Your main bot's chat shows how many reviews it is sitting on, with a link to them.
 
 ### Fixed
 - The keyboard capitalises sentences in chats, group chats, and the description, persona, role and group-name fields. The message box gave the keyboard no hint before, so it stayed lowercase.

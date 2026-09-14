@@ -144,7 +144,15 @@ fun TeamScreen(onBack: () -> Unit, onChat: (String) -> Unit) {
                     val forYou = s.needingYou
                     if (forYou.isNotEmpty()) {
                         item(key = "you-header") { SectionHeader("Needs you") }
-                        items(forYou, key = { "y:" + it.id }) { r -> PermissionCard(r, s.authority, busy, onDecide = { c, sc -> vm.decide(r.id, c, sc) }) }
+                        items(forYou, key = { "y:" + it.id }) { r ->
+                            Column {
+                                PermissionCard(r, s.authority, busy, onDecide = { c, sc -> vm.decide(r.id, c, sc) })
+                                // Deciding inside the bot's chat keeps that chat live, so any follow-up prompt from Hermes itself lands on the phone.
+                                TextButton(onClick = { onChat(r.profile) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                                    Text("Open ${botName(r.profile)}'s chat to decide there", color = BobColors.Accent, style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
                     }
                     val waiting = s.waiting
                     if (waiting.isNotEmpty()) {
