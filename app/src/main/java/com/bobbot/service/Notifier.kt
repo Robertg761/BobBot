@@ -37,12 +37,27 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
 
         private const val TAG = "Notifier"
         private val seq = AtomicInteger(2000)
+
+        /** Stable per request, so re-polling the same pending request updates one card. */
+        fun decisionNotificationId(requestId: String): Int = ("decision:$requestId").hashCode() and 0x7fffffff
+
+        /** Distinct per action, or the three PendingIntents would collapse into one. */
+        fun requestCode(requestId: String, index: Int): Int = ("decision:$requestId:$index").hashCode() and 0x7fffffff
+
+        /** What the user sees after deciding from the shade. */
+        fun decisionSummary(bot: String, tool: String, choice: String, scope: String): String = when {
+            choice == "denied" -> "Denied for $bot"
+            scope == "tool" -> "Allowed ${tool.ifBlank { "that tool" }} for $bot here"
+            else -> "Allowed for $bot"
+        }
     }
 
     private val manager = NotificationManagerCompat.from(ctx)
 
     init {
         runCatching { createChannels() }.onFailure { Log.w(TAG, "channel setup failed", it) }
+        // Conversation shortcuts have to exist before a notification can point at one.
+        runCatching { Shortcuts.attach(ctx) }.onFailure { Log.w(TAG, "shortcut watch failed", it) }
     }
 
     private fun createChannels() {
@@ -85,7 +100,14 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
     fun botMessage(bot: String, title: String, text: String, sessionId: String?, profile: String?) {
         val body = text.ifBlank { "(no content)" }
         val id = threadId(profile ?: bot, sessionId)
-        val sender = androidx.core.app.Person.Builder().setName(bot.ifBlank { "Bot" }).setKey(profile ?: bot).build()
+        // A conversation shortcut is what earns the Conversations section, priority and bubbles.
+        if (profile != null) runCatching { Shortcuts.ensure(ctx, profile) }.onFailure { Log.w(TAG, "shortcut failed", it) }
+        val sender = androidx.core.app.Person.Builder()
+            .setName(bot.ifBlank { "Bot" })
+            .setKey(profile ?: bot)
+            .setBot(true)
+            .apply { if (profile != null) runCatching { setIcon(Shortcuts.avatar(ctx, profile)) } }
+            .build()
         val style = NotificationCompat.MessagingStyle(androidx.core.app.Person.Builder().setName("You").build())
         val messages = synchronized(threads) {
             threads.getOrPut(id.toString()) { ArrayDeque() }.also { q ->
@@ -104,7 +126,14 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             .setAutoCancel(true)
             .setOnlyAlertOnce(false)
             .setContentIntent(openApp(sessionId, profile))
-            .apply { if (sessionId != null && profile != null) addAction(replyAction(id, sessionId, profile)) }
+            .addPerson(sender)
+            .apply {
+                if (sessionId != null && profile != null) addAction(replyAction(id, sessionId, profile))
+                if (profile != null) runCatching {
+                    setShortcutId(Shortcuts.idFor(profile))
+                    bubble(profile)?.let { setBubbleMetadata(it) }
+                }.onFailure { Log.w(TAG, "conversation metadata failed", it) }
+            }
             .build()
         post(id, n)
     }
@@ -126,11 +155,15 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
         post(seq.incrementAndGet(), n)
     }
 
-    /** Your main bot escalated a specialist's permission request; only you can decide it. */
-    fun decisionNeeded(profile: String, tool: String, reason: String, authority: String) {
+    /**
+     * Your main bot escalated a specialist's permission request; only you can decide it.
+     * The three actions decide it in place through [DecisionReceiver], so the app never has to open.
+     */
+    fun decisionNeeded(id: String, profile: String, tool: String, reason: String, authority: String) {
         val who = com.bobbot.data.repo.BotNames.display(profile)
         val boss = com.bobbot.data.repo.BotNames.display(authority)
         val body = "$who wants to use $tool." + (if (reason.isNotBlank()) " $boss: $reason" else "")
+        val nid = decisionNotificationId(id)
         val n = base(CH_BOTS)
             .setContentTitle("$boss needs your decision")
             .setContentText(body.take(120))
@@ -139,8 +172,54 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
             .setContentIntent(openApp(null, profile))
+            .addAction(decisionAction(nid, id, profile, tool, "Allow", "approved", "exact", 0))
+            .addAction(decisionAction(nid, id, profile, tool, "Allow here", "approved", "tool", 1))
+            .addAction(decisionAction(nid, id, profile, tool, "Deny", "denied", "exact", 2))
             .build()
-        post(seq.incrementAndGet(), n)
+        post(nid, n)
+    }
+
+    /** One tap on Allow / Allow here / Deny. */
+    private fun decisionAction(
+        notificationId: Int,
+        requestId: String,
+        profile: String,
+        tool: String,
+        label: String,
+        choice: String,
+        scope: String,
+        index: Int,
+    ): NotificationCompat.Action {
+        val intent = Intent(ctx, DecisionReceiver::class.java).apply {
+            action = DecisionReceiver.ACTION_DECIDE
+            putExtra(DecisionReceiver.EXTRA_REQUEST, requestId)
+            putExtra(DecisionReceiver.EXTRA_CHOICE, choice)
+            putExtra(DecisionReceiver.EXTRA_SCOPE, scope)
+            putExtra(DecisionReceiver.EXTRA_PROFILE, profile)
+            putExtra(DecisionReceiver.EXTRA_TOOL, tool)
+            putExtra(DecisionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+        }
+        val pending = PendingIntent.getBroadcast(
+            ctx,
+            requestCode(requestId, index),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Action.Builder(0, label, pending).build()
+    }
+
+    /** Swap the request for its outcome, on the same id so a re-poll cannot leave a stale card. */
+    fun decided(notificationId: Int, profile: String, tool: String, choice: String, scope: String, ok: Boolean) {
+        val bot = com.bobbot.data.repo.BotNames.display(profile)
+        val n = base(CH_BOTS)
+            .setContentTitle(if (ok) decisionSummary(bot, tool, choice, scope) else "Could not decide · tap to open")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setTimeoutAfter(if (ok) 4_000 else 30_000)
+            .setContentIntent(openApp(null, profile))
+            .build()
+        post(notificationId, n)
     }
 
     /** The result of a scheduled automation run. */
@@ -159,11 +238,12 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
         post(seq.incrementAndGet(), n)
     }
 
-    /** The ongoing notification that keeps [LinkService] alive. */
+    /** The ongoing notification that keeps [LinkService] alive. Kept as quiet as Android allows. */
     fun linkOngoing(status: String): Notification =
         base(CH_LINK)
-            .setContentTitle("BobBot is listening for your bots")
+            .setContentTitle("Listening for your bots")
             .setContentText(status)
+            .setSubText(null)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setOngoing(true)
             .setSilent(true)
@@ -198,6 +278,19 @@ class Notifier @Inject constructor(@ApplicationContext private val ctx: Context)
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+    }
+
+    /**
+     * A floating bubble for a bot's chat. Android ignores this until the user allows bubbles for
+     * the conversation, and it needs the shortcut set above, so it is strictly a bonus.
+     */
+    private fun bubble(profile: String): NotificationCompat.BubbleMetadata? {
+        val target = openApp(null, profile) ?: return null
+        return NotificationCompat.BubbleMetadata.Builder(target, Shortcuts.avatar(ctx, profile))
+            .setDesiredHeight(600)
+            .setAutoExpandBubble(false)
+            .setSuppressNotification(false)
+            .build()
     }
 
     /** Direct reply from the shade: the text goes to the same session through [ReplyReceiver]. */
