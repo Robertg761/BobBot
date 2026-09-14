@@ -79,6 +79,16 @@ class SetupViewModel @Inject constructor(
         _ui.update { it.copy(ntfyTopic = t) }
     }
 
+    /**
+     * A pairing QR scanned from the dashboard. It already knows its own address, so fill it in and
+     * check it here; all the user has left to do is sign in.
+     */
+    fun pairWith(url: String) {
+        if (_ui.value.url == url && (_ui.value.checking || _ui.value.serverOk == true)) return
+        _ui.update { it.copy(url = url, step = SetupStep.Server, serverOk = null, error = null) }
+        checkServer()
+    }
+
     fun checkServer() {
         val normalized = HermesClient.normalizeBaseUrl(_ui.value.url)
         if (normalized == null) { _ui.update { it.copy(error = "Enter a valid address like 192.168.1.20:9119") }; return }

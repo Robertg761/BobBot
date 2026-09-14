@@ -13,7 +13,21 @@ if name not in sys.modules:
     sys.modules[name] = module
     spec.loader.exec_module(module)
 team = sys.modules[name]
+qr = importlib.import_module(f'{name}.qr')
 router = APIRouter()
+
+
+@router.get('/pair')
+def pair(origin: str = ''):
+    """This dashboard's address as a QR code, so the phone does not have to be told where to look."""
+    from urllib.parse import urlsplit
+    parts = urlsplit(origin.strip())
+    if parts.scheme not in ('http', 'https') or not parts.netloc:
+        raise HTTPException(400, 'origin must be an http(s) address')
+    # Only the origin travels: a path or query would end up inside the deep link's own query string.
+    target = f'{parts.scheme}://{parts.netloc}'
+    link = f'bobbot://pair?url={target}'
+    return {'link': link, 'modules': qr.encode(link)}
 
 
 @router.get('/team')
