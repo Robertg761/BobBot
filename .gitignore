@@ -1,0 +1,42 @@
+# macOS
+.DS_Store
+
+# IntelliJ / Android Studio
+*.iml
+.idea/
+
+# Gradle
+.gradle/
+.gradle-home/
+.gradle-user-home/
+build/
+*/build/
+
+# Android
+local.properties
+keystore.properties
+*.jks
+*.keystore
+captures/
+.externalNativeBuild/
+.cxx/
+app/release/
+*.apk
+*.aab
+*.dm
+output-metadata.json
+
+# Node / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local tooling
+.gemini/
+.genkit/
+gha-creds-*.json
+local/
+
+# Local Android tooling (created when running Gradle in this environment)
+.android-user-home/
