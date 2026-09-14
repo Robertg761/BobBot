@@ -107,7 +107,8 @@ def nudge_specialist(row, authority):
     from tools import bot_mode_dm as dm
     author = {'id': f'bot:{authority}', 'name': handle_of(authority), 'is_bot': True}
     dm_file = dm._write_dm_file(text)
-    argv = [hermes_cli(), '-p', row['profile'], *dm.BOT_CHAT_TURN_ARGS]
+    from tools.bot_relay import BOT_CHAT_TURN_ARGS
+    argv = [hermes_cli(), '-p', row['profile'], *BOT_CHAT_TURN_ARGS]
     try:
         dm._admit_live_dm(home, dm_file, author)  # queues for a surface that holds the chat live (BobBot, desktop)
     except Exception as exc:
